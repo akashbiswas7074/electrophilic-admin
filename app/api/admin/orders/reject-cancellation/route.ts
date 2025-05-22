@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/database/connect";
+import Order from "@/lib/database/models/order.model";
+import Admin from "@/lib/database/models/admin.model";
+import { cookies } from "next/headers";
+import { sendOrderStatusUpdateEmail } from "@/lib/email";
+
+/**
+ * API endpoint to reject cancellation requests
+ * - Removes the cancelRequested flag
+ * - Optionally adds a rejection message
+ * - Notifies the customer
+ */
+export async function POST(req: NextRequest) {  
+  try {
+    // Verify admin authentication using cookie-based auth
+    const cookieStore = await cookies();
+    const adminId = cookieStore.get('adminId')?.value;
+    
+    // If no adminId cookie, unauthorized
+    if (!adminId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Verify that admin exists in database
+    await connectToDatabase();
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    console.log('Received rejection request with body:', JSON.stringify(body));
+    const { orderId, productId, customMessage } = body;
+
+    if (!orderId || !productId) {
+      console.log('Missing required fields in rejection request:', { orderId, productId });
+      return NextResponse.json({ 
+        success: false, 
+        message: "Missing required fields: orderId and productId" 
+      }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    // Find order and populate user info for notification
+    const order = await Order.findById(orderId).populate('user', 'name email');
+
+    if (!order) {
+      console.log('Order not found:', orderId);
+      return NextResponse.json({ success: false, message: "Order not found" }, { status: 404 });
+    }
+
+    console.log('Order found:', order._id.toString());
+    console.log('Looking for productId in order products:', productId);
+
+    // Find the product using findIndex method (more reliable than id())
+    const productIndex = order.products.findIndex((p: any) => p._id.toString() === productId);
+    
+    if (productIndex === -1) {
+      console.log(`Product with ID ${productId} not found in order products array`);
+      return NextResponse.json({ 
+        success: false, 
+        message: "Product not found in order" 
+      }, { status: 404 });
+    }
+    
+    console.log(`Product found at index: ${productIndex}`);
+    const product = order.products[productIndex];
+    
+    if (!product.cancelRequested) {
+      console.log('Product does not have a cancellation request (cancelRequested is not true)');
+      return NextResponse.json({ 
+        success: false, 
+        message: "This product does not have a cancellation request" 
+      }, { status: 400 });
+    }    console.log('Updating product to reject cancellation...');
+      // Update product to reject cancellation
+    order.products[productIndex].cancelRequested = false;
+    order.products[productIndex].cancelReason = `Rejected: ${product.cancelReason || 'Customer requested cancellation'}`;
+    // Do not change the status when rejecting cancellation, keep the current status
+    // We're only updating the cancelRequested and cancelReason fields
+    
+    // Also update corresponding item in orderItems array if it exists
+    if (order.orderItems && Array.isArray(order.orderItems)) {
+      const orderItemIndex = order.orderItems.findIndex(
+        (item: any) => item._id.toString() === productId
+      );
+        if (orderItemIndex !== -1) {
+        console.log(`Corresponding item found in orderItems at index: ${orderItemIndex}`);
+        order.orderItems[orderItemIndex].cancelRequested = false;
+        order.orderItems[orderItemIndex].cancelReason = `Rejected: ${order.orderItems[orderItemIndex].cancelReason || 'Customer requested cancellation'}`;
+        // Do not change the status when rejecting cancellation, keep the current status
+        
+        // Mark the orderItems array as modified
+        order.markModified('orderItems');
+      }
+    }
+    
+    // Mark the products array as modified
+    order.markModified('products');
+      // Save the order
+    try {
+      await order.save();
+      console.log('Order saved successfully after cancellation rejection');
+    } catch (saveError: any) {
+      console.error('Error saving order after cancellation rejection:', saveError.message);
+      return NextResponse.json({ 
+        success: false, 
+        message: `Error saving order: ${saveError.message}` 
+      }, { status: 500 });
+    }
+    
+    // Send notification to customer
+    if (order.user?.email) {
+      try {
+        // Convert ObjectId to string before passing to email function
+        const orderIdString = order._id.toString();
+        
+        // Send email notification about the rejection
+        await sendOrderStatusUpdateEmail(order.user.email, {
+          orderId: orderIdString,
+          userName: order.user.name || "Customer",
+          productName: product.name || product.product?.name || "Product",
+          status: "Cancellation Request Rejected",
+          statusUpdateMessage: customMessage || "Your cancellation request could not be approved at this time."
+        });
+        
+        console.log(`Cancellation rejection email sent to ${order.user.email}`);
+      } catch (emailError) {
+        console.error("Failed to send cancellation rejection email:", emailError);
+        // Continue with the process even if email fails
+      }
+    }    console.log('Returning success response');
+    // Prepare the response object with stringified IDs
+    return NextResponse.json({
+      success: true,
+      message: "Cancellation request rejected successfully. The request has been removed from the list of pending cancellations.",
+      order: {
+        id: order._id.toString(),
+        productId: product._id.toString()
+      }
+    });
+
+  } catch (error: any) {
+    console.error("Error rejecting cancellation request:", error);
+    return NextResponse.json({
+      success: false,
+      message: error.message || "Failed to reject cancellation request"
+    }, { status: 500 });
+  }
+}

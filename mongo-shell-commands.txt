@@ -1,0 +1,31 @@
+// MongoDB shell commands to manually update order status
+
+// Connect to your MongoDB instance
+// mongo "mongodb+srv://your-connection-string"
+
+// Select the database
+// use your-database-name
+
+// View the current document
+db.orders.findOne({ _id: ObjectId("68299f0a0e873297f3af9e75") })
+
+// Update the main status field
+db.orders.updateOne(
+  { _id: ObjectId("68299f0a0e873297f3af9e75") },
+  { $set: { status: "Confirmed" } }
+)
+
+// Update status in all products array items
+db.orders.updateOne(
+  { _id: ObjectId("68299f0a0e873297f3af9e75") },
+  { $set: { "products.$[].status": "Confirmed" } }
+)
+
+// Update status in all orderItems array items
+db.orders.updateOne(
+  { _id: ObjectId("68299f0a0e873297f3af9e75") },
+  { $set: { "orderItems.$[].status": "Confirmed" } }
+)
+
+// Verify the updates
+db.orders.findOne({ _id: ObjectId("68299f0a0e873297f3af9e75") })

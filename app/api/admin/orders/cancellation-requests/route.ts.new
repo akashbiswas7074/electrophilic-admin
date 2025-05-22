@@ -1,0 +1,182 @@
+// filepath: d:\PROJECT@\co-pal-ecom-admin\app\api\admin\orders\cancellation-requests\route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/database/connect";
+import Order from "@/lib/database/models/order.model";
+import Admin from "@/lib/database/models/admin.model";
+import { cookies } from "next/headers";
+import { updateProductOrderStatus } from "@/lib/database/actions/admin/orders/orders.actions";
+
+/**
+ * API endpoint to get cancellation requests
+ * Query params:
+ * - since: Optional ISO date string to filter requests since a specific time
+ * - limit: Optional limit on number of requests to return
+ */
+export async function GET(req: NextRequest) {  
+  try {    
+    // Verify admin authentication using cookie-based auth
+    const cookieStore = await cookies();
+    const adminId = cookieStore.get('adminId')?.value;
+    
+    // If no adminId cookie, unauthorized
+    if (!adminId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Verify that admin exists in database
+    await connectToDatabase();
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    await connectToDatabase();
+
+    // Parse query parameters
+    const url = new URL(req.url);
+    const sinceParam = url.searchParams.get('since');
+    const limitParam = url.searchParams.get('limit');
+    
+    // Build query for finding orders with cancellation requests
+    // Use $elemMatch to properly query for subdocuments that match both conditions
+    let query: any = {};
+    
+    // If 'since' parameter is provided, filter by cancelRequestedAt
+    if (sinceParam) {
+      try {
+        const sinceDate = new Date(sinceParam);
+        query.products = {
+          $elemMatch: {
+            cancelRequested: true,
+            cancelRequestedAt: { $gte: sinceDate }
+          }
+        };
+      } catch (error) {
+        console.error("Invalid since date format:", error);
+        // Continue with default query if date parsing fails
+        query.products = {
+          $elemMatch: {
+            cancelRequested: true
+          }
+        };
+      }
+    } else {
+      // Default query if no since parameter
+      query.products = {
+        $elemMatch: {
+          cancelRequested: true
+        }
+      };
+    }
+
+    // Find orders with cancellation requests
+    const orders = await Order.find(query)
+      .populate("user", "name email")
+      .sort({ "products.cancelRequestedAt": -1 }) // Sort by newest first
+      .limit(limitParam ? parseInt(limitParam) : 50); // Default limit to 50
+      
+    // Extract cancellation request info from orders
+    const cancellationRequests = [];
+    
+    for (const order of orders) {
+      // Make sure we're only processing products with cancelRequested flag
+      const cancelledProducts = order.products.filter((product: any) => product && product.cancelRequested === true);
+      
+      for (const product of cancelledProducts) {
+        try {
+          cancellationRequests.push({
+            _id: product._id.toString(),
+            orderId: order._id.toString(),
+            orderNumber: order.orderId || order.orderNumber || order._id.toString().substring(0, 8),
+            productId: product._id.toString(),
+            productName: product.name || "Product",
+            reason: product.cancelReason || "No reason provided",
+            requestedAt: product.cancelRequestedAt || new Date(),
+            status: product.status || "Not Processed",
+            user: {
+              name: order.user?.name || "Customer",
+              email: order.user?.email || "No email provided"
+            }
+          });
+        } catch (err) {
+          console.error("Error processing cancellation request for product:", err);
+          // Continue with the next product
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      requests: cancellationRequests
+    });
+
+  } catch (error: any) {
+    console.error("Error fetching cancellation requests:", error);
+    return NextResponse.json({
+      success: false,
+      message: error.message || "Failed to fetch cancellation requests"
+    }, { status: 500 });
+  }
+}
+
+/**
+ * API endpoint to update cancellation request status
+ * Required body:
+ * - orderId: Order ID
+ * - productId: Product ID within the order
+ * - status: New status (e.g., "Cancelled", "Cancellation Rejected")
+ * - message: Optional message for the notification email
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    // Verify admin authentication using cookie-based auth
+    const cookieStore = await cookies();
+    const adminId = cookieStore.get('adminId')?.value;
+    
+    // If no adminId cookie, unauthorized
+    if (!adminId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Verify that admin exists in database
+    await connectToDatabase();
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    // Parse request body
+    const body = await req.json();
+    const { orderId, productId, status, message } = body;
+    
+    // Validate required parameters
+    if (!orderId || !productId || !status) {
+      return NextResponse.json({
+        success: false, 
+        message: "Missing required parameters: orderId, productId, and status are required"
+      }, { status: 400 });
+    }
+    
+    // Update product status in the order
+    await updateProductOrderStatus(
+      orderId,
+      productId,
+      status,
+      undefined, // trackingUrl (not needed for cancellations)
+      undefined, // trackingId (not needed for cancellations)
+      message || `Your cancellation request has been ${status.toLowerCase()}`, // Custom message
+      false // Send email notification
+    );
+    
+    return NextResponse.json({
+      success: true,
+      message: `Order item ${status.toLowerCase()} successfully`,
+    });
+  } catch (error: any) {
+    console.error("Error processing cancellation request:", error);
+    return NextResponse.json({
+      success: false,
+      message: error.message || "Failed to process cancellation request"
+    }, { status: 500 });
+  }
+}

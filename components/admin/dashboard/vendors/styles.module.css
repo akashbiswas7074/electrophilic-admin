@@ -1,0 +1,23 @@
+.table thead {
+  background: #006081;
+}
+.table thead th {
+  color: #fff !important;
+}
+.table tbody td svg {
+  cursor: pointer;
+  width: 27px;
+  height: 27px;
+}
+.table tbody td svg:hover {
+  fill: red;
+}
+.table__img {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.table .ver {
+  width: 30px;
+}

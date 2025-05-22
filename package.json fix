@@ -1,0 +1,8 @@
+// You need to install @mui/system which is a peer dependency of @mui/x-data-grid
+npm install @mui/system
+
+// Or if you're using yarn
+yarn add @mui/system
+
+// Or if you're using pnpm
+pnpm add @mui/system

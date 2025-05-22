@@ -1,0 +1,495 @@
+"use client";
+import React from "react";
+import "../../globals.css";
+import "../mobile-styles.css";
+import "@mantine/core/styles.css";
+import {
+  AppShell,
+  Burger,
+  Group,
+  MantineProvider,
+  Text,
+} from "@mantine/core";
+
+import { useDisclosure } from "@mantine/hooks";
+import { MdOutlineCategory, MdSpaceDashboard } from "react-icons/md";
+import { IoListCircleSharp } from "react-icons/io5";
+import { FaTable, FaStar, FaFilm } from "react-icons/fa";
+import { BsPatchPlus } from "react-icons/bs";
+import { RiCoupon3Fill, RiSendPlaneFill } from "react-icons/ri"; 
+import { VscGraph } from "react-icons/vsc";
+import { FaRegRectangleList, FaUsers } from "react-icons/fa6";
+import { ImUsers } from "react-icons/im";
+import { BiLogOut } from "react-icons/bi";
+import { IconAlertCircle } from "@tabler/icons-react";
+import Link from "next/link";
+import { ModalsProvider } from "@mantine/modals";
+import Logo from "@/components/Logo";
+import { useRouter } from 'next/navigation';
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/toaster";
+import { Menu } from "lucide-react";
+import { DashboardHeader } from "@/components/ui/dashboard-header";
+import { MobileBottomNavigation } from "@/components/ui/mobile-bottom-navigation";
+import dynamic from "next/dynamic";
+
+// Use dynamic import to prevent server-side rendering errors with notifications
+const CancellationRequestNotifier = dynamic(
+  () => import("@/components/admin/orders/CancellationRequestNotifier"),
+  { ssr: false }
+);
+
+export default function DashboardLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
+  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/admin/logout', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        router.push('/admin/login');
+        router.refresh();
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  interface NavItemProps {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+  }
+
+  const NavItem = ({ href, icon, label }: NavItemProps) => {
+    return (
+      <Link href={href} className="block">
+        <div className="flex items-center px-4 py-2.5 text-sm font-medium transition-colors hover:bg-blue-50 hover:text-blue-700">
+          <span className="mr-3 text-gray-500">{icon}</span>
+          <span>{label}</span>
+        </div>
+      </Link>
+    );
+  };
+
+  return (
+    <MantineProvider>
+      <ModalsProvider>
+        <AppShell
+          header={{ height: 60 }}
+          navbar={{
+            width: 300,
+            breakpoint: "sm",
+            collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+          }}
+        >
+          <AppShell.Header>
+            <DashboardHeader 
+              title="Admin Dashboard" 
+              user={{ name: "Admin User", email: "admin@example.com" }} 
+            />
+          </AppShell.Header>
+
+          <AppShell.Navbar p="md">
+            <AppShell.Section className="flex items-center justify-between border-b pb-2 mb-4">
+              <Group>
+                <Logo className="h-6" />
+                <Text fw={500}>Admin Dashboard</Text>
+              </Group>
+              <Burger
+                opened={desktopOpened}
+                onClick={toggleDesktop}
+                size="sm"
+                hiddenFrom="sm"
+              />
+            </AppShell.Section>
+
+            {/* Desktop Sidebar Navigation */}
+            <AppShell.Section grow component="nav" className="space-y-4">
+              {/* Dashboard Links */}
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard" 
+                  icon={<MdSpaceDashboard size={20} />}
+                  label="Admin Dashboard" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/send-coupon" 
+                  icon={<RiCoupon3Fill size={20} />}
+                  label="Send Coupon to User" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/send-email" 
+                  icon={<RiSendPlaneFill size={20} />}
+                  label="Send Custom Email" 
+                />
+              </div>
+              
+              {/* Offers & Reviews */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Offers & Reviews
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/topbars" 
+                  icon={<FaTable size={20} />}
+                  label="Topbar Offers" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/homescreenoffers" 
+                  icon={<FaTable size={20} />}
+                  label="Home Screen Offers" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/reviews" 
+                  icon={<FaStar size={20} />}
+                  label="Product Reviews" 
+                />
+              </div>
+              
+              {/* User Management */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  User Management
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/users" 
+                  icon={<ImUsers size={20} />}
+                  label="Users" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/vendors" 
+                  icon={<FaUsers size={20} />}
+                  label="Vendors" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/coupons" 
+                  icon={<RiCoupon3Fill size={20} />}
+                  label="Coupons" 
+                />
+              </div>
+              
+              {/* Orders */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Orders
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/orders" 
+                  icon={<IoListCircleSharp size={20} />}
+                  label="Orders" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/orders/cancellation-requests" 
+                  icon={<IconAlertCircle size={18} />} 
+                  label="Cancellation Requests" 
+                />
+              </div>
+              
+              {/* Products */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Products
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/product/all/tabular" 
+                  icon={<FaTable size={20} />}
+                  label="All Products" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/product/create" 
+                  icon={<BsPatchPlus size={20} />}
+                  label="Create Product" 
+                />
+              </div>
+              
+              {/* Categories */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Categories
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/categories" 
+                  icon={<MdOutlineCategory size={20} />}
+                  label="Categories" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/subCategories" 
+                  icon={<MdOutlineCategory size={20} className="rotate-180" />}
+                  label="Sub Categories" 
+                />
+              </div>
+              
+              {/* Analytics */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Analytics
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/analytics/order" 
+                  icon={<VscGraph size={20} />}
+                  label="Order Analytics" 
+                />
+              </div>
+              
+              {/* Banners */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Banners
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/banners/website" 
+                  icon={<FaRegRectangleList size={20} />}
+                  label="Website Banners" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/banners/metrics" 
+                  icon={<VscGraph size={20} />}
+                  label="Banner Analytics" 
+                />
+                <NavItem 
+                  href="/admin/dashboard/banners/app" 
+                  icon={<FaRegRectangleList size={20} />}
+                  label="App Banners" 
+                />
+              </div>
+              
+              {/* Customization */}
+              <div className="px-4 py-2 bg-blue-50/30">
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Customization
+                </div>
+              </div>
+              <div className="mb-2">
+                <NavItem 
+                  href="/admin/dashboard/featuredyoutube" 
+                  icon={<FaFilm size={20} />}
+                  label="Featured Video" 
+                />
+              </div>
+            </AppShell.Section>
+
+            <AppShell.Section>
+              <Button onClick={handleLogout} variant="destructive" className="w-full mt-4">
+                <BiLogOut size={16} className="mr-2" />
+                Logout
+              </Button>            </AppShell.Section>
+          </AppShell.Navbar>
+              <div className="p-0 overflow-auto h-[calc(100vh-80px)]">
+                {/* Mobile Nav Items */}
+                <div className="flex flex-col">
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard" 
+                      icon={<MdSpaceDashboard size={20} />}
+                      label="Admin Dashboard" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/send-coupon" 
+                      icon={<RiCoupon3Fill size={20} />}
+                      label="Send Coupon to User" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/send-email" 
+                      icon={<RiSendPlaneFill size={20} />}
+                      label="Send Custom Email" 
+                    />
+                  </div>
+                  
+                  {/* Offers & Reviews */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Offers & Reviews
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/topbars" 
+                      icon={<FaTable size={20} />}
+                      label="Topbar Offers" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/homescreenoffers" 
+                      icon={<FaTable size={20} />}
+                      label="Home Screen Offers" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/reviews" 
+                      icon={<FaStar size={20} />}
+                      label="Product Reviews" 
+                    />
+                  </div>
+                  
+                  {/* User Management */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      User Management
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/users" 
+                      icon={<ImUsers size={20} />}
+                      label="Users" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/vendors" 
+                      icon={<FaUsers size={20} />}
+                      label="Vendors" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/coupons" 
+                      icon={<RiCoupon3Fill size={20} />}
+                      label="Coupons" 
+                    />
+                  </div>
+                  
+                  {/* Orders */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Orders
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/orders" 
+                      icon={<IoListCircleSharp size={20} />}
+                      label="Orders" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/orders/cancellation-requests" 
+                      icon={<IconAlertCircle size={18} />} 
+                      label="Cancellation Requests" 
+                    />
+                  </div>
+                  
+                  {/* Products */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Products
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/product/all/tabular" 
+                      icon={<FaTable size={20} />}
+                      label="All Products" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/product/create" 
+                      icon={<BsPatchPlus size={20} />}
+                      label="Create Product" 
+                    />
+                  </div>
+                  
+                  {/* Categories */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Categories
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/categories" 
+                      icon={<MdOutlineCategory size={20} />}
+                      label="Categories" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/subCategories" 
+                      icon={<MdOutlineCategory size={20} className="rotate-180" />}
+                      label="Sub Categories" 
+                    />
+                  </div>
+                  
+                  {/* Analytics */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Analytics
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/analytics/order" 
+                      icon={<VscGraph size={20} />}
+                      label="Order Analytics" 
+                    />
+                  </div>
+                  
+                  {/* Banners */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Banners
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/banners/website" 
+                      icon={<FaRegRectangleList size={20} />}
+                      label="Website Banners" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/banners/metrics" 
+                      icon={<VscGraph size={20} />}
+                      label="Banner Analytics" 
+                    />
+                    <NavItem 
+                      href="/admin/dashboard/banners/app" 
+                      icon={<FaRegRectangleList size={20} />}
+                      label="App Banners" 
+                    />
+                  </div>
+                  
+                  {/* Customization */}
+                  <div className="px-4 py-2 bg-blue-50/30">
+                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Customization
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <NavItem 
+                      href="/admin/dashboard/featuredyoutube" 
+                      icon={<FaFilm size={20} />}
+                      label="Featured Video" 
+                    />
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <AppShell.Main>
+            {children}
+            <CancellationRequestNotifier />
+            <div className="h-16 md:hidden">
+              {/* Spacer for mobile bottom navigation */}
+            </div>
+          </AppShell.Main>
+
+          {/* Mobile Bottom Navigation */}
+          <MobileBottomNavigation />
+        </AppShell>
+        
+        <Toaster />
+      </ModalsProvider>
+    </MantineProvider>
+  );
+}
