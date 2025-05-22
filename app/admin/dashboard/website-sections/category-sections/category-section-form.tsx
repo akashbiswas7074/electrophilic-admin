@@ -43,11 +43,22 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   
   // Initialize the form with default values or existing data
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+      title: initialData.title || "",
+      // Make sure to use the proper categoryId string value, not the object
+      categoryId: initialData.categoryId && typeof initialData.categoryId === "string" 
+        ? initialData.categoryId 
+        : initialData.categoryId?._id || "",
+      displayOrder: initialData.displayOrder || 0,
+      productLimit: initialData.productLimit || 8,
+      isActive: initialData.isActive !== undefined ? initialData.isActive : true,
+    } : {
       title: "",
       categoryId: "",
       displayOrder: 0,
@@ -59,23 +70,53 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
   // Fetch categories on component mount
   useEffect(() => {
     const fetchCategories = async () => {
+      setLoadingCategories(true);
       try {
         const response = await axios.get("/api/admin/categories");
         if (response.data.success) {
-          setCategories(response.data.categories);
+          setCategories(response.data.categories || []);
+        } else {
+          console.error("Failed to fetch categories:", response.data.message);
+          // Only show toast on initial load, not on retries
+          if (retryCount === 0) {
+            toast({
+              title: "Warning",
+              description: "Failed to load categories. Will retry automatically.",
+              variant: "destructive",
+            });
+          }
+          
+          // Set a retry timer
+          const retryTimer = setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, 2000); // Retry after 2 seconds
+          
+          return () => clearTimeout(retryTimer);
         }
       } catch (error) {
-        console.error("Failed to fetch categories:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load categories. Please try again.",
-          variant: "destructive",
-        });
+        console.error("Error fetching categories:", error);
+        // Only show toast on initial load, not on retries
+        if (retryCount === 0) {
+          toast({
+            title: "Warning",
+            description: "Failed to load categories. Will retry automatically.",
+            variant: "destructive",
+          });
+        }
+        
+        // Set a retry timer
+        const retryTimer = setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+        }, 2000); // Retry after 2 seconds
+        
+        return () => clearTimeout(retryTimer);
+      } finally {
+        setLoadingCategories(false);
       }
     };
 
     fetchCategories();
-  }, [toast]);
+  }, [toast, retryCount]);
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
@@ -103,8 +144,15 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
         if (onSuccess) {
           onSuccess();
         }
+      } else {
+        toast({
+          title: "Error",
+          description: response.data.message || "An error occurred",
+          variant: "destructive",
+        });
       }
     } catch (error: any) {
+      console.error("Error submitting form:", error);
       toast({
         title: "Error",
         description: error.response?.data?.message || "Something went wrong",
@@ -114,6 +162,17 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
       setLoading(false);
     }
   };
+
+  // Debug info for initial values
+  useEffect(() => {
+    if (initialData) {
+      console.log("Initial category data:", {
+        categoryId: initialData.categoryId,
+        categoryObj: initialData.category,
+        formValue: form.getValues('categoryId')
+      });
+    }
+  }, [initialData, form]);
 
   return (
     <Form {...form}>
@@ -140,22 +199,29 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
               <FormLabel>Category</FormLabel>
               <Select 
                 onValueChange={field.onChange} 
-                defaultValue={field.value}
+                value={field.value}
+                disabled={loadingCategories}
               >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
+                    <SelectValue placeholder={loadingCategories ? "Loading categories..." : "Select a category"} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem 
-                      key={category._id} 
-                      value={category._id}
-                    >
-                      {category.name}
+                  {categories.length > 0 ? (
+                    categories.map((category) => (
+                      <SelectItem 
+                        key={category._id} 
+                        value={category._id}
+                      >
+                        {category.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="loading" disabled>
+                      {loadingCategories ? "Loading..." : "No categories found"}
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -219,9 +285,14 @@ export default function CategorySectionForm({ initialData, onSuccess }: Category
           )}
         />
 
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initialData ? "Update Category Section" : "Create Category Section"}
+        <Button type="submit" disabled={loading || loadingCategories} className="w-full">
+          {loading ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {initialData ? "Updating..." : "Creating..."}</>
+          ) : loadingCategories ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading Categories...</>
+          ) : (
+            initialData ? "Update Category Section" : "Create Category Section"
+          )}
         </Button>
       </form>
     </Form>
