@@ -17,13 +17,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set secure cookie
+    // Set cookie with proper configuration
     const cookieStore = cookies();
-    (await cookieStore).set('adminId', admin._id.toString(), {
+    cookieStore.set({
+      name: 'adminId',
+      value: admin._id.toString(),
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 1 week
+      maxAge: 60 * 60 * 24 * 7, // 1 week in seconds
+      path: '/'
     });
 
     return NextResponse.json({

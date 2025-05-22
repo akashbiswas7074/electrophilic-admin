@@ -4,7 +4,12 @@ import { cookies } from 'next/headers';
 export async function POST() {
   try {
     const cookieStore = cookies();
-    (await cookieStore).delete('adminId');
+    
+    // Delete cookie with proper configuration
+    cookieStore.delete({
+      name: 'adminId',
+      path: '/'
+    });
 
     return NextResponse.json({
       success: true,

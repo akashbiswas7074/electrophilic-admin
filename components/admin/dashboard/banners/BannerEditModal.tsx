@@ -96,14 +96,16 @@ export default function BannerEditModal({
 
 		setIsLoading(true);
 		try {
+			// Convert Date objects to ISO strings before sending to the server
+			// This ensures consistent date format that MongoDB can properly store
 			const result = await updateBannerSettings(banner.public_id, {
 				linkUrl: formData.linkUrl,
 				altText: formData.altText,
 				platform: formData.platform,
 				priority: formData.priority,
 				isActive: formData.isActive,
-				startDate: formData.startDate,
-				endDate: formData.endDate,
+				startDate: formData.startDate ? new Date(formData.startDate.setHours(0, 0, 0, 0)) : null,
+				endDate: formData.endDate ? new Date(formData.endDate.setHours(23, 59, 59, 999)) : null,
 			});
 
 			if (result.success) {
@@ -248,35 +250,17 @@ export default function BannerEditModal({
 								Start Date
 							</Label>
 							<div className="col-span-3">
-								<Popover>
-									<PopoverTrigger asChild>
-										<Button
-											id="startDate"
-											variant="outline"
-											className={cn(
-												"w-full justify-start text-left font-normal",
-												!formData.startDate && "text-muted-foreground"
-											)}
-										>
-											<CalendarIcon className="mr-2 h-4 w-4" />
-											{formData.startDate ? (
-												format(formData.startDate, "PPP")
-											) : (
-												<span>No start date (show immediately)</span>
-											)}
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="w-auto p-0">
-										<Calendar
-											mode="single"
-											selected={formData.startDate || undefined}
-											onSelect={(date) =>
-												setFormData({ ...formData, startDate: date || null })
-											}
-											initialFocus
-										/>
-									</PopoverContent>
-								</Popover>
+								<Input
+									id="startDate"
+									type="date"
+									value={formData.startDate ? formData.startDate.toISOString().split('T')[0] : ''}
+									onChange={(e) => {
+										const date = e.target.value ? new Date(e.target.value) : null;
+										setFormData({ ...formData, startDate: date });
+									}}
+									className="w-full"
+									placeholder="YYYY-MM-DD"
+								/>
 								{formData.startDate && (
 									<Button
 										type="button"
@@ -296,35 +280,17 @@ export default function BannerEditModal({
 								End Date
 							</Label>
 							<div className="col-span-3">
-								<Popover>
-									<PopoverTrigger asChild>
-										<Button
-											id="endDate"
-											variant="outline"
-											className={cn(
-												"w-full justify-start text-left font-normal",
-												!formData.endDate && "text-muted-foreground"
-											)}
-										>
-											<CalendarIcon className="mr-2 h-4 w-4" />
-											{formData.endDate ? (
-												format(formData.endDate, "PPP")
-											) : (
-												<span>No end date (show indefinitely)</span>
-											)}
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="w-auto p-0">
-										<Calendar
-											mode="single"
-											selected={formData.endDate || undefined}
-											onSelect={(date) =>
-												setFormData({ ...formData, endDate: date || null })
-											}
-											initialFocus
-										/>
-									</PopoverContent>
-								</Popover>
+								<Input
+									id="endDate"
+									type="date"
+									value={formData.endDate ? formData.endDate.toISOString().split('T')[0] : ''}
+									onChange={(e) => {
+										const date = e.target.value ? new Date(e.target.value) : null;
+										setFormData({ ...formData, endDate: date });
+									}}
+									className="w-full"
+									placeholder="YYYY-MM-DD"
+								/>
 								{formData.endDate && (
 									<Button
 										type="button"

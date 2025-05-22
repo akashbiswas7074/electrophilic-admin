@@ -22,8 +22,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export default function BannerUploadForm() {
@@ -34,8 +32,8 @@ export default function BannerUploadForm() {
   const [altText, setAltText] = useState("");
   const [priority, setPriority] = useState<number>(10); // Default priority
   const [isActive, setIsActive] = useState<boolean>(true); // Default active
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [imagePreviews, setImagePreviews] = useState<
     { url: string; file: File }[]
   >([]);
@@ -89,14 +87,30 @@ export default function BannerUploadForm() {
         })
       );
 
+      // Set start date to beginning of day (00:00:00) if defined
+      let formattedStartDate: string | undefined = undefined;
+      if (startDate) {
+        const startWithTime = new Date(startDate);
+        startWithTime.setHours(0, 0, 0, 0);
+        formattedStartDate = startWithTime.toISOString();
+      }
+
+      // Set end date to end of day (23:59:59) if defined
+      let formattedEndDate: string | undefined = undefined;
+      if (endDate) {
+        const endWithTime = new Date(endDate);
+        endWithTime.setHours(23, 59, 59, 999);
+        formattedEndDate = endWithTime.toISOString();
+      }
+
       // Upload images with all parameters
       const result = await uploadWebsiteBannerImages(
         dataUrls,
         platform,
         linkUrl || undefined,
         altText || undefined,
-        startDate ? startDate.toISOString() : undefined,
-        endDate ? endDate.toISOString() : undefined,
+        formattedStartDate,
+        formattedEndDate,
         priority,
         isActive
       );
@@ -215,29 +229,17 @@ export default function BannerUploadForm() {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="startDate">Start Date (Optional)</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                id="startDate"
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !startDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {startDate ? format(startDate, "PPP") : "No start date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={startDate}
-                onSelect={setStartDate}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            id="startDate"
+            type="date"
+            value={startDate ? startDate.toISOString().split('T')[0] : ''}
+            onChange={(e) => {
+              const date = e.target.value ? new Date(e.target.value) : null;
+              setStartDate(date);
+            }}
+            className="w-full"
+            placeholder="YYYY-MM-DD"
+          />
           <p className="text-sm text-muted-foreground mt-1">
             When the banner will start displaying (leave blank for immediate)
           </p>
@@ -246,7 +248,7 @@ export default function BannerUploadForm() {
               variant="ghost"
               size="sm"
               className="mt-1"
-              onClick={() => setStartDate(undefined)}
+              onClick={() => setStartDate(null)}
             >
               Clear
             </Button>
@@ -255,29 +257,17 @@ export default function BannerUploadForm() {
 
         <div>
           <Label htmlFor="endDate">End Date (Optional)</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                id="endDate"
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !endDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {endDate ? format(endDate, "PPP") : "No end date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={endDate}
-                onSelect={setEndDate}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            id="endDate"
+            type="date"
+            value={endDate ? endDate.toISOString().split('T')[0] : ''}
+            onChange={(e) => {
+              const date = e.target.value ? new Date(e.target.value) : null;
+              setEndDate(date);
+            }}
+            className="w-full"
+            placeholder="YYYY-MM-DD"
+          />
           <p className="text-sm text-muted-foreground mt-1">
             When the banner will stop displaying (leave blank for no end date)
           </p>
@@ -286,7 +276,7 @@ export default function BannerUploadForm() {
               variant="ghost"
               size="sm"
               className="mt-1"
-              onClick={() => setEndDate(undefined)}
+              onClick={() => setEndDate(null)}
             >
               Clear
             </Button>
