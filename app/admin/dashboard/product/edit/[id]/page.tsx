@@ -192,14 +192,8 @@ const EditProductPage = () => {
       errors.category = "Category is required";
     }
     
-    // Validate sizes
-    const hasSizes = formValues.sizes.some((size: any) => 
-      size.size?.trim() && (size.qty !== undefined && size.qty !== "") && (size.price !== undefined && size.price !== "")
-    );
-    
-    if (!hasSizes) {
-      errors.sizes = "At least one size with quantity and price is required";
-    }
+    // Sizes are now optional - no validation required
+    // Products can be created without any sizes for items like accessories, electronics, etc.
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -764,13 +758,13 @@ const EditProductPage = () => {
                 <CardHeader>
                   <CardTitle>Product Variants</CardTitle>
                   <CardDescription>
-                    Update different sizes, quantities, and pricing options.
+                    Update different sizes, quantities, and pricing options. Sizes are optional - leave empty for products like accessories or electronics that don't have size variations.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between mb-4">
-                      <Label className="text-base font-medium">Sizes & Pricing <span className="text-red-500">*</span></Label>
+                      <Label className="text-base font-medium">Sizes & Pricing <span className="text-muted-foreground">(Optional)</span></Label>
                       <Button 
                         type="button" 
                         variant="outline" 
@@ -783,14 +777,22 @@ const EditProductPage = () => {
                       </Button>
                     </div>
                     
-                    {formErrors.sizes && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-md mb-2">
-                        <p className="text-red-500 text-sm flex items-center">
-                          <Info className="h-4 w-4 mr-2" />
-                          {formErrors.sizes}
-                        </p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+                      <div className="flex items-start gap-2">
+                        <div className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0">ℹ️</div>
+                        <div className="text-sm text-blue-700">
+                          <p className="font-medium mb-1">Sizes are now optional!</p>
+                          <p>You can create products without any sizes for items like:</p>
+                          <ul className="list-disc list-inside mt-1 space-y-0.5">
+                            <li>Electronics and gadgets</li>
+                            <li>Books and media</li>
+                            <li>Accessories (bags, jewelry)</li>
+                            <li>Home decor items</li>
+                          </ul>
+                          <p className="mt-2">Only add sizes if your product comes in different size variations (S, M, L, etc.)</p>
+                        </div>
                       </div>
-                    )}
+                    </div>
 
                     <div className="space-y-4 mt-2">
                       {/* Headers for columns */}
@@ -811,7 +813,7 @@ const EditProductPage = () => {
                             <Label htmlFor={`size-${index}`} className="text-xs mb-1 block">Size</Label>
                             <Input
                               id={`size-${index}`}
-                              placeholder="e.g., S, M, L, XL"
+                              placeholder="S, M, L, XL, One Size"
                               value={size.size}
                               onChange={(e) => updateSize(index, "size", e.target.value)}
                               className="mt-1 focus:border-primary"
@@ -836,7 +838,7 @@ const EditProductPage = () => {
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="Price in rupees"
+                              placeholder="Product price"
                               value={size.price}
                               onChange={(e) => updateSize(index, "price", e.target.value)}
                               className="mt-1 focus:border-primary"
@@ -862,14 +864,6 @@ const EditProductPage = () => {
                           <p className="text-muted-foreground">No sizes added yet. Click "Add Size" to add product sizes.</p>
                         </div>
                       )}
-                    </div>
-                    
-                    <div className="pt-4">
-                      <p className="text-sm text-muted-foreground flex items-start">
-                        <Info className="h-4 w-4 mr-2 mt-0.5" />
-                        Each product must have at least one size with quantity and price. 
-                        For products without different sizes, you can use options like "Default", "One Size", or "Universal".
-                      </p>
                     </div>
                   </div>
                 </CardContent>

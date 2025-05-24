@@ -1,9 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
-import dynamic from 'next/dynamic';
-import { X } from 'lucide-react';
 
 // Shadcn UI Components
 import { Button } from "@/components/ui/button";
@@ -15,16 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Import icons
-import { 
-  Check, 
-  Trash, 
-  Plus, 
-  Upload, 
-  Info, 
-  ArrowRight,
-} from "lucide-react";
-
 import {
   createProduct,
   getParentsandCategories,
@@ -34,7 +21,26 @@ import { getSubCategoriesByCategoryParent } from "@/lib/database/actions/admin/s
 
 // Import RichTextEditor component
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
-import { joditConfig } from "~/components/ui/rich-text-editor";
+
+// Define types
+interface FormValues {
+  name: string;
+  description: string;
+  brand: string;
+  sku: string;
+  discount: number;
+  imageFiles: File[];
+  longDescription: string;
+  parent: string;
+  category: string;
+  subCategories: string[];
+  sizes: Array<{ size: string; qty: string; price: string }>;
+  benefits: Array<{ name: string }>;
+  ingredients: Array<{ name: string }>;
+  questions: Array<{ question: string; answer: string }>;
+  shippingFee: string;
+  details: Array<{ name: string; value: string }>;
+}
 
 const PreviewContent = ({ content, mode, onClose }: { content: string; mode: 'desktop' | 'mobile'; onClose: () => void }) => {
   return (
@@ -46,7 +52,7 @@ const PreviewContent = ({ content, mode, onClose }: { content: string; mode: 'de
             onClick={onClose}
             className="p-1 rounded-full hover:bg-gray-200"
           >
-            <X size={20} />
+            ✕
           </button>
         </div>
         <div className="flex-1 overflow-auto p-4">
@@ -112,14 +118,8 @@ const CreateProductPage = () => {
       errors.category = "Category is required";
     }
     
-    // Validate sizes
-    const hasSizes = formValues.sizes.some(size => 
-      size.size?.trim() && size.qty?.trim() && size.price?.trim()
-    );
-    
-    if (!hasSizes) {
-      errors.sizes = "At least one size with quantity and price is required";
-    }
+    // Sizes are now optional - no validation required
+    // Products can be created without any sizes for items like accessories, electronics, etc.
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -555,7 +555,7 @@ const CreateProductPage = () => {
                     onClick={() => setActiveTab("categories")}
                     className="flex items-center gap-2"
                   >
-                    Next <ArrowRight className="h-4 w-4" />
+                    Next →
                   </Button>
                 </CardFooter>
               </Card>
@@ -660,7 +660,7 @@ const CreateProductPage = () => {
                     onClick={() => setActiveTab("variants")}
                     className="flex items-center gap-2"
                   >
-                    Next <ArrowRight className="h-4 w-4" />
+                    Next →
                   </Button>
                 </CardFooter>
               </Card>
@@ -672,13 +672,13 @@ const CreateProductPage = () => {
                 <CardHeader>
                   <CardTitle>Product Variants</CardTitle>
                   <CardDescription>
-                    Add different sizes, quantities, and pricing options.
+                    Add different sizes, quantities, and pricing options. Sizes are optional - leave empty for products like accessories or electronics that don't have size variations.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>Sizes & Pricing <span className="text-red-500">*</span></Label>
+                      <Label>Sizes & Pricing <span className="text-muted-foreground">(Optional)</span></Label>
                       <Button 
                         type="button" 
                         variant="outline" 
@@ -686,14 +686,26 @@ const CreateProductPage = () => {
                         onClick={addSize}
                         className="h-8"
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add Size
+                        + Add Size
                       </Button>
                     </div>
                     
-                    {formErrors.sizes && (
-                      <p className="text-red-500 text-xs">{formErrors.sizes}</p>
-                    )}
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+                      <div className="flex items-start gap-2">
+                        <div className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0">ℹ️</div>
+                        <div className="text-sm text-blue-700">
+                          <p className="font-medium mb-1">Sizes are now optional!</p>
+                          <p>You can create products without any sizes for items like:</p>
+                          <ul className="list-disc list-inside mt-1 space-y-0.5">
+                            <li>Electronics and gadgets</li>
+                            <li>Books and media</li>
+                            <li>Accessories (bags, jewelry)</li>
+                            <li>Home decor items</li>
+                          </ul>
+                          <p className="mt-2">Only add sizes if your product comes in different size variations (S, M, L, etc.)</p>
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="space-y-3 mt-2">
                       {formValues.sizes.map((size, index) => (
@@ -705,7 +717,7 @@ const CreateProductPage = () => {
                             <Label htmlFor={`size-${index}`} className="text-xs">Size</Label>
                             <Input
                               id={`size-${index}`}
-                              placeholder="S, M, L, XL"
+                              placeholder="S, M, L, XL, One Size"
                               value={size.size}
                               onChange={(e) => updateSize(index, "size", e.target.value)}
                               className="mt-1"
@@ -717,7 +729,7 @@ const CreateProductPage = () => {
                               id={`qty-${index}`}
                               type="number"
                               min="0"
-                              placeholder="Quantity"
+                              placeholder="Available quantity"
                               value={size.qty}
                               onChange={(e) => updateSize(index, "qty", e.target.value)}
                               className="mt-1"
@@ -730,23 +742,21 @@ const CreateProductPage = () => {
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="Price"
+                              placeholder="Product price"
                               value={size.price}
                               onChange={(e) => updateSize(index, "price", e.target.value)}
                               className="mt-1"
                             />
                           </div>
-                          {index > 0 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeSize(index)}
-                              className="h-9 w-9 mt-1"
-                            >
-                              <Trash className="h-4 w-4 text-red-500" />
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeSize(index)}
+                            className="h-9 w-9 mt-1"
+                          >
+                            🗑️
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -765,7 +775,7 @@ const CreateProductPage = () => {
                     onClick={() => setActiveTab("attributes")}
                     className="flex items-center gap-2"
                   >
-                    Next <ArrowRight className="h-4 w-4" />
+                    Next →
                   </Button>
                 </CardFooter>
               </Card>
@@ -792,8 +802,7 @@ const CreateProductPage = () => {
                         onClick={addBenefit}
                         className="h-8"
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add Benefit
+                        + Add Benefit
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -813,7 +822,7 @@ const CreateProductPage = () => {
                               onClick={() => removeBenefit(index)}
                               className="h-9 w-9"
                             >
-                              <Trash className="h-4 w-4 text-red-500" />
+                              🗑️
                             </Button>
                           )}
                         </div>
@@ -832,8 +841,7 @@ const CreateProductPage = () => {
                         onClick={addIngredient}
                         className="h-8"
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add Ingredient
+                        + Add Ingredient
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -853,7 +861,7 @@ const CreateProductPage = () => {
                               onClick={() => removeIngredient(index)}
                               className="h-9 w-9"
                             >
-                              <Trash className="h-4 w-4 text-red-500" />
+                              🗑️
                             </Button>
                           )}
                         </div>
@@ -872,8 +880,7 @@ const CreateProductPage = () => {
                         onClick={addDetail}
                         className="h-8"
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add Detail
+                        + Add Detail
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -907,7 +914,7 @@ const CreateProductPage = () => {
                               onClick={() => removeDetail(index)}
                               className="h-9 w-9 mt-1"
                             >
-                              <Trash className="h-4 w-4 text-red-500" />
+                              🗑️
                             </Button>
                           )}
                         </div>
@@ -928,7 +935,7 @@ const CreateProductPage = () => {
                     onClick={() => setActiveTab("media")}
                     className="flex items-center gap-2"
                   >
-                    Next <ArrowRight className="h-4 w-4" />
+                    Next →
                   </Button>
                 </CardFooter>
               </Card>
@@ -959,11 +966,10 @@ const CreateProductPage = () => {
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full">
                             {images.map((image, index) => (
                               <div key={index} className="relative aspect-square rounded-md overflow-hidden">
-                                <Image
+                                <img
                                   src={image}
                                   alt={`Product image ${index + 1}`}
-                                  fill
-                                  className="object-cover"
+                                  className="w-full h-full object-cover"
                                 />
                                 <button
                                   type="button"
@@ -974,9 +980,9 @@ const CreateProductPage = () => {
                                       formValues.imageFiles.filter((_, i) => i !== index)
                                     );
                                   }}
-                                  className="absolute top-1 right-1 bg-black/60 rounded-full p-1"
+                                  className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center text-xs"
                                 >
-                                  <X className="h-4 w-4 text-white" />
+                                  ✕
                                 </button>
                               </div>
                             ))}
@@ -985,7 +991,7 @@ const CreateProductPage = () => {
                               htmlFor="add-more-images"
                               className="border-2 border-dashed border-muted-foreground/25 rounded-md aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition"
                             >
-                              <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                              <div className="text-2xl mb-2">📁</div>
                               <span className="text-sm text-muted-foreground">Add more</span>
                               <input
                                 id="add-more-images"
@@ -1002,19 +1008,14 @@ const CreateProductPage = () => {
                             htmlFor="image-upload"
                             className="w-full h-full flex flex-col items-center justify-center cursor-pointer"
                           >
-                            <Upload className="h-10 w-10 text-muted-foreground mb-2" />
+                            <div className="text-4xl mb-4">📷</div>
                             <h3 className="text-lg font-medium mb-1">Drop your images here</h3>
                             <p className="text-sm text-muted-foreground mb-4">
                               or click to browse (max 10 images)
                             </p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="mt-2"
-                            >
+                            <div className="px-4 py-2 bg-muted rounded-md border hover:bg-muted/80 transition-colors">
                               Select Files
-                            </Button>
+                            </div>
                             <input
                               id="image-upload"
                               type="file"
@@ -1083,8 +1084,7 @@ const CreateProductPage = () => {
                         onClick={addDetail}
                         className="h-8"
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add Detail
+                        + Add Detail
                       </Button>
                     </div>
                     
@@ -1122,7 +1122,7 @@ const CreateProductPage = () => {
                               onClick={() => removeDetail(index)}
                               className="h-9 w-9 mt-1"
                             >
-                              <Trash className="h-4 w-4 text-red-500" />
+                              🗑️
                             </Button>
                           )}
                         </div>
@@ -1160,7 +1160,7 @@ const CreateProductPage = () => {
                       </>
                     ) : (
                       <>
-                        <Check className="h-4 w-4" />
+                        <span className="material-icons-outlined h-4 w-4" />
                         Create Product
                       </>
                     )}
@@ -1171,7 +1171,7 @@ const CreateProductPage = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="preview-close" onClick={closePreview}>
-              <X className="h-4 w-4" />
+              <span className="material-icons-outlined h-4 w-4" />
             </div>
             <div 
               className="prose max-w-none"

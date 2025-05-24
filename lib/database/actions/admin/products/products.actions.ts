@@ -32,7 +32,10 @@ export const createProduct = async (
   benefits: Array<{ name: string }>,
   ingredients: Array<{ name: string }>,
   parent: string,
-  featured: boolean
+  featured: boolean,
+  price?: number, // Optional direct price for products without sizes
+  qty?: number,   // Optional direct quantity for products without sizes
+  stock?: number  // Optional direct stock for products without sizes
 ) => {
   try {
     await connectToDatabase();
@@ -45,15 +48,27 @@ export const createProduct = async (
           success: false,
         };
       } else {
+        // Create subProduct object with optional sizes
+        const subProductData: any = {
+          sku,
+          images,
+          discount,
+        };
+
+        // Add sizes if provided, otherwise add direct price/quantity
+        if (sizes && sizes.length > 0) {
+          subProductData.sizes = sizes;
+        } else {
+          // For products without sizes, store price and quantity directly
+          if (price !== undefined) subProductData.price = price;
+          if (qty !== undefined) subProductData.qty = qty;
+          if (stock !== undefined) subProductData.stock = stock;
+        }
+
         await Parent.updateOne(
           {
             $push: {
-              subProducts: {
-                sku,
-                images,
-                sizes,
-                discount,
-              },
+              subProducts: subProductData,
             },
           },
           { new: true }
@@ -65,9 +80,26 @@ export const createProduct = async (
       }
     } else {
       const slug = slugify(name);
+      
+      // Create subProduct object with optional sizes
+      const subProductData: any = {
+        sku,
+        images,
+        discount,
+      };
+
+      // Add sizes if provided, otherwise add direct price/quantity
+      if (sizes && sizes.length > 0) {
+        subProductData.sizes = sizes;
+      } else {
+        // For products without sizes, store price and quantity directly
+        if (price !== undefined) subProductData.price = price;
+        if (qty !== undefined) subProductData.qty = qty;
+        if (stock !== undefined) subProductData.stock = stock;
+      }
+
       const newProduct = new Product({
         name,
-
         description,
         longDescription,
         brand,
@@ -78,15 +110,14 @@ export const createProduct = async (
         benefits,
         ingredients,
         subCategories,
-        subProducts: [
-          {
-            sku,
-            images,
-            sizes,
-            discount,
-          },
-        ],
+        subProducts: [subProductData],
         featured,
+        // Also store direct price/quantity at product level if no sizes
+        ...((!sizes || sizes.length === 0) && {
+          price: price,
+          qty: qty,
+          stock: stock
+        })
       });
       await newProduct.save();
       return {
@@ -166,42 +197,39 @@ export const deleteProduct = async (productId: string) => {
 export const updateProduct = async (
   productId: string,
   sku: string,
+  images: [],
   sizes: Array<{ size: string; qty: string; price: string }>,
   discount: number,
   name: string,
   description: string,
+  longDescription: string,
   brand: string,
   details: Array<{ name: string; value: string }>,
   questions: Array<{ question: string; answer: string }>,
+  category: string,
+  subCategories: string[],
   benefits: Array<{ name: string }>,
   ingredients: Array<{ name: string }>,
-  longDescription: string,
-  images?: Array<{ url: string; public_id: string }>,
-  category?: string,
-  subCategories?: string[],
   featured?: boolean,
   shippingFee?: number,
-  shortDescription?: string
+  price?: number, // Optional direct price for products without sizes
+  qty?: number,   // Optional direct quantity for products without sizes
+  stock?: number  // Optional direct stock for products without sizes
 ) => {
   try {
     await connectToDatabase();
-
-    const product = await Product.findOne({
-      _id: productId,
-    });
+    
+    const product: any = await Product.findById(productId);
     if (!product) {
       return {
-        message:
-          "Product not found or you don't have permission to edit this product.",
+        message: "Product not found with this Id!",
         success: false,
       };
     }
-    
+
     // Update basic product information
     product.name = name;
-    product.slug = slugify(name);
     product.description = description;
-    if (shortDescription) product.shortDescription = shortDescription;
     product.brand = brand;
     product.details = details;
     product.questions = questions;
@@ -212,7 +240,33 @@ export const updateProduct = async (
     // Update product subProduct information
     product.subProducts[0].sku = sku;
     product.subProducts[0].discount = discount;
-    product.subProducts[0].sizes = sizes;
+    
+    // Handle sizes vs direct price/quantity
+    if (sizes && sizes.length > 0) {
+      product.subProducts[0].sizes = sizes;
+      // Clear direct price/quantity fields when sizes are provided
+      product.subProducts[0].price = undefined;
+      product.subProducts[0].qty = undefined;
+      product.subProducts[0].stock = undefined;
+      product.price = undefined;
+      product.qty = undefined;
+      product.stock = undefined;
+    } else {
+      // For products without sizes, store direct price/quantity
+      product.subProducts[0].sizes = [];
+      if (price !== undefined) {
+        product.subProducts[0].price = price;
+        product.price = price;
+      }
+      if (qty !== undefined) {
+        product.subProducts[0].qty = qty;
+        product.qty = qty;
+      }
+      if (stock !== undefined) {
+        product.subProducts[0].stock = stock;
+        product.stock = stock;
+      }
+    }
     
     // Update images if provided
     if (images && images.length > 0) {
@@ -240,15 +294,14 @@ export const updateProduct = async (
 
     await product.save();
     return {
+      message: "Product updated successfully.",
       success: true,
-      message: "Product updated successfully",
-      product: JSON.parse(JSON.stringify(product)),
     };
   } catch (error: any) {
     console.log(error);
     return {
+      message: error,
       success: false,
-      message: error.message || "Failed to update product",
     };
   }
 };
