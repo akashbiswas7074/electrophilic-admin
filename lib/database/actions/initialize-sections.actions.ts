@@ -91,6 +91,13 @@ export async function initializeDefaultSections() {
         description: "Carousel featuring newly arrived products"
       },
       {
+        name: "Top Reviews",
+        sectionId: "top-reviews",
+        isVisible: true,
+        order: 115,
+        description: "Showcases top customer reviews and testimonials"
+      },
+      {
         name: "Featured Videos",
         sectionId: "featured-videos",
         isVisible: true,

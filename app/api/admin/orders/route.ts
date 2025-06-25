@@ -3,9 +3,17 @@ import Order from "@/lib/database/models/order.model";
 import Product from "@/lib/database/models/product.model";
 import User from "@/lib/database/models/user.model";
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   try {
+    // Get current user to check role
+    const currentUser = await getCurrentUser();
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
     // Extract query parameters
     const url = new URL(req.url);
     const range = url.searchParams.get('range') || 'all';
@@ -86,14 +94,28 @@ export async function GET(req: NextRequest) {
       .populate({
         path: "products.product",
         model: Product,
-        select: "slug brand sku name images price",
+        select: "slug brand sku name images price vendor vendorId",
+        populate: {
+          path: "vendorId",
+          model: "Vendor",
+          select: "name email"
+        }
       })
-      // Removed the problematic orderItems.product populate that's causing the error
+      .populate({
+        path: "orderItems.product", 
+        model: Product,
+        select: "slug brand sku name images price vendor vendorId",
+        populate: {
+          path: "vendorId",
+          model: "Vendor", 
+          select: "name email"
+        }
+      })
       .sort({ createdAt: -1 })
       .lean();
 
     // Process orders for compatibility
-    const processedOrders = orders.map((order) => {
+    let processedOrders = orders.map((order) => {
       const orderObj = JSON.parse(JSON.stringify(order));
       
       // If order has orderItems but no products, create products array
@@ -111,7 +133,39 @@ export async function GET(req: NextRequest) {
       return orderObj;
     });
     
-    console.log(`API: Fetched ${processedOrders.length} orders for range: ${range}`);
+    // If user is a vendor, filter orders to only show those with products belonging to this vendor
+    if (currentUser.role === 'vendor') {
+      const vendorId = currentUser.id;
+      
+      // Filter to only include orders that have at least one product from this vendor
+      processedOrders = processedOrders.filter(order => {
+        // Check if any product in the order belongs to this vendor
+        const hasVendorProduct = (order.products || []).some((product: any) => {
+          if (product.product?.vendorId?._id) {
+            return product.product.vendorId._id.toString() === vendorId;
+          }
+          if (product.product?.vendor) {
+            return product.product.vendor.toString() === vendorId;
+          }
+          return false;
+        }) || (order.orderItems || []).some((item: any) => {
+          if (item.product?.vendorId?._id) {
+            return item.product.vendorId._id.toString() === vendorId;
+          }
+          if (item.product?.vendor) {
+            return item.product.vendor.toString() === vendorId;
+          }
+          return false;
+        });
+        
+        return hasVendorProduct;
+      });
+      
+      console.log(`API: Fetched ${processedOrders.length} orders for vendor: ${vendorId}`);
+    } else {
+      console.log(`API: Fetched ${processedOrders.length} orders for admin user`);
+    }
+    
     return NextResponse.json(processedOrders);
     
   } catch (error: any) {

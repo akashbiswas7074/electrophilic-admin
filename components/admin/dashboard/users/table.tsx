@@ -34,26 +34,6 @@ function descendingComparator(a: any, b: any, orderBy: any) {
   }
   return 0;
 }
-async function deleteHandler(id: string) {
-  try {
-    // axios
-    //   .delete("/api/admin/deleteSingleUser", {
-    //     data: {
-    //       id: id,
-    //     },
-    //   })
-    //   .then((res) => toast.success("User deleted Successfully."))
-    //   .catch((err) => toast.error("Something went wrong."));
-    await deleteSingleUser(id)
-      .then((res: any) => alert(res ? res : ""))
-      .catch((err: any) => console.log(err));
-  } catch (error: any) {
-    alert(
-      error.message ||
-        "An error occurred while deleting vendor and associated products"
-    );
-  }
-}
 
 function getComparator(order: any, orderBy: any) {
   return order === "desc"
@@ -232,6 +212,28 @@ export default function UsersTable({ rows }: { rows: any }) {
   const [dense, setDense] = React.useState(false);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
+  // Move deleteHandler inside the component to properly handle state updates
+  const handleDeleteUser = React.useCallback(
+    async (id: string) => {
+      try {
+        await deleteSingleUser(id)
+          .then((res: any) => {
+            if (res) {
+              alert(res);
+            }
+            // Optionally trigger a refresh of the data here
+          })
+          .catch((err: any) => console.log(err));
+      } catch (error: any) {
+        alert(
+          error.message ||
+            "An error occurred while deleting user"
+        );
+      }
+    },
+    []
+  );
+
   const handleRequestSort = (event: any, property: any) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
@@ -366,8 +368,11 @@ export default function UsersTable({ rows }: { rows: any }) {
                           </TableCell>
                           <TableCell align="right">
                             <div
-                              className=""
-                              onClick={() => deleteHandler(row._id)}
+                              className="cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation(); // Prevent row selection when clicking delete
+                                handleDeleteUser(row._id);
+                              }}
                             >
                               <RiDeleteBin7Fill />
                             </div>

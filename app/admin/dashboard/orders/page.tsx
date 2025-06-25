@@ -65,6 +65,8 @@ const OrdersPage = () => {
   const [range, setRange] = useState<DateRange>("all");
   const [isPaid, setIsPaid] = useState<PaymentStatus>("-");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("-");
+  const [vendorFilter, setVendorFilter] = useState<string>(""); // Add vendor filter state
+
   const [orderStats, setOrderStats] = useState({
     total: 0,
     completed: 0,
@@ -369,8 +371,13 @@ const OrdersPage = () => {
       });
     }
     
+    // Apply vendor filter
+    if (vendorFilter) {
+      filtered = filtered.filter(order => order.vendorId === vendorFilter);
+    }
+    
     setFilteredOrders(filtered);
-  }, [orders, searchQuery, statusFilter, date]);
+  }, [orders, searchQuery, statusFilter, date, vendorFilter]);
   
   // Mobile order card renderer
   const renderMobileOrderCard = (order: any) => (
@@ -731,6 +738,8 @@ const OrdersPage = () => {
         isPaid={isPaid}
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
+        vendorFilter={vendorFilter}
+        setVendorFilter={setVendorFilter}
         updateOrderStatus={updateOrderStatus}
         markOrderAsOld={markOrderAsOld}
         refreshOrders={fetchOrders}

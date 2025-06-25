@@ -369,3 +369,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Shimmer animation for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Enhanced image loading states */
+.image-loading {
+  @apply bg-gray-100 animate-pulse;
+}
+
+.image-error {
+  @apply bg-gray-50 border-2 border-dashed border-gray-300;
+}

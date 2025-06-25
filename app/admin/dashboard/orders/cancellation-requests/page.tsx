@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/table';
 import { IconAlertCircle, IconCheck, IconClockHour4, IconFileSearch, IconX } from '@tabler/icons-react';
 import Link from 'next/link';
+import { getVendorDisplayInfo } from "@/lib/utils/vendor-utils";
 
 interface CancellationRequest {
   _id: string;

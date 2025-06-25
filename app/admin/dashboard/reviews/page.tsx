@@ -3,6 +3,9 @@ import { Star } from "lucide-react";
 
 import { getLatestProductReviews } from "@/lib/database/actions/admin/products/products.actions";
 import SwitchComponent from "@/components/admin/dashboard/reviews/switch";
+import DeleteReviewButton from "@/components/admin/dashboard/reviews/delete-button";
+import { Group } from "@mantine/core";
+
 const ReviewsPage = async () => {
   const all_reviews = await getLatestProductReviews();
   const reviews = all_reviews?.reviews;
@@ -35,7 +38,7 @@ const ReviewsPage = async () => {
                     className="w-[100px] object-cover"
                   />
                 </div>
-                <div className="">
+                <div className="flex-1">
                   {/* Product Information */}
                   <div className="mb-4">
                     <h2 className="text-lg font-semibold">{productName}</h2>
@@ -74,8 +77,9 @@ const ReviewsPage = async () => {
                       </span>
                     </div>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 flex justify-between items-center">
                     <SwitchComponent _id={_id} verified={verified} />
+                    <DeleteReviewButton reviewId={_id} />
                   </div>
                 </div>
               </div>

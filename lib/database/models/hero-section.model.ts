@@ -15,6 +15,7 @@ export interface IHeroSection {
   _id?: string;
   title: string;           // The main heading "STRENGTH TAKES SWEAT"
   subtitle: string;        // The text below "The training styles that aren't afraid to put in the work."
+  longDescription?: string; // Rich text description for dynamic HTML content
   buttons: IButton[];      // Array of buttons with label and link
   isActive: boolean;       // Whether this section is currently active
   order: number;           // Display order on the page
@@ -24,6 +25,10 @@ export interface IHeroSection {
   contentAlignment?: 'left' | 'center' | 'right'; // Where to align the content
   mediaUrl?: string;       // URL for media (image or video)
   mediaType?: 'image' | 'video'; // Type of media
+  titleColor?: string;     // Color for the title text
+  descriptionColor?: string; // Color for the description text
+  buttonTextColor?: string; // Color for button text
+  buttonBackgroundColor?: string; // Background color for buttons
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -60,16 +65,15 @@ const HeroSectionSchema = new Schema<IHeroSection>(
       required: [true, "Subtitle is required"],
       trim: true,
     },
+    longDescription: {
+      type: String,
+      default: '',
+    },
     buttons: {
       type: [ButtonSchema],
       default: [],
-      validate: {
-        validator: function(buttons: any[]) {
-          // At least one button is required
-          return buttons && Array.isArray(buttons) && buttons.length > 0;
-        },
-        message: 'At least one button is required'
-      }
+      // Remove the validation that requires at least one button
+      // This allows hero sections to exist without buttons
     },
     isActive: {
       type: Boolean,
@@ -110,6 +114,22 @@ const HeroSectionSchema = new Schema<IHeroSection>(
       enum: ['image', 'video'],
       default: 'image',
       required: true,
+    },
+    titleColor: {
+      type: String,
+      default: '#000000',
+    },
+    descriptionColor: {
+      type: String,
+      default: '#333333',
+    },
+    buttonTextColor: {
+      type: String,
+      default: '#ffffff',
+    },
+    buttonBackgroundColor: {
+      type: String,
+      default: '#3b82f6',
     },
   },
   { 

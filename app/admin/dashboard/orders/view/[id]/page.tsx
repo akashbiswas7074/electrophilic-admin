@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getOrderById } from "@/lib/database/actions/admin/orders/orders.actions";
 import { mapWebsiteStatusToAdmin } from "@/lib/order-status-utils";
+import { getVendorDisplayInfo } from "@/lib/utils/vendor-utils";
 import {
   Container,
   Title,
@@ -322,6 +323,7 @@ const AdminOrderViewPage = () => {
                 <Table.Th>Unit Price</Table.Th>
                 <Table.Th>Quantity</Table.Th>
                 <Table.Th>Item Total</Table.Th>
+                <Table.Th>Vendor</Table.Th>
                 <Table.Th>Item Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -346,7 +348,33 @@ const AdminOrderViewPage = () => {
                   </Table.Td>
                   <Table.Td>₹{item.price?.toFixed(2) || (item.product?.price?.toFixed(2) || "N/A")}</Table.Td>
                   <Table.Td>{item.quantity}</Table.Td>
-                  <Table.Td>₹{(item.price * item.quantity).toFixed(2)}</Table.Td>                  <Table.Td>
+                  <Table.Td>₹{(item.price * item.quantity).toFixed(2)}</Table.Td>
+                  <Table.Td>
+                    {item.product?.vendor || item.product?.vendorId ? (
+                      <div>
+                        {(() => {
+                          const vendorInfo = getVendorDisplayInfo(item.product?.vendor, item.product?.vendorId);
+                          return (
+                            <>
+                              {vendorInfo.businessName !== vendorInfo.name ? (
+                                <>
+                                  <Text size="sm" fw={500}>{vendorInfo.businessName}</Text>
+                                  <Text size="xs">{vendorInfo.name}</Text>
+                                </>
+                              ) : (
+                                <Text size="sm" fw={500}>{vendorInfo.name}</Text>
+                              )}
+                              {vendorInfo.email && <Text size="xs" c="dimmed">{vendorInfo.email}</Text>}
+                              {vendorInfo.phone && <Text size="xs" c="dimmed">Phone: {vendorInfo.phone}</Text>}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <Text size="sm" c="dimmed">N/A</Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td>
                     <OrderStatusBadge 
                       status={item.status}
                       orderId={order._id}

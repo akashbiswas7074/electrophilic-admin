@@ -245,12 +245,16 @@ export default function DashboardLayout({
       const response = await fetch('/api/admin/logout', {
         method: 'POST'
       });
+      
       if (response.ok) {
+        // Clear any local state if needed
         router.push('/admin/login');
         router.refresh();
+      } else {
+        console.error('Logout failed:', await response.text());
       }
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout error:', error);
     }
   };  
   

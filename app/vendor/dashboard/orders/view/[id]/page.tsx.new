@@ -1,0 +1,493 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { getOrderById } from "@/lib/database/actions/admin/orders/orders.actions";
+import { mapWebsiteStatusToAdmin } from "@/lib/order-status-utils";
+import {
+  Container,
+  Title,
+  Text,
+  Paper,
+  Loader,
+  Alert,
+  Divider,
+  SimpleGrid,
+  Badge,
+  Group,
+  Button,
+  Table,
+  Image,
+  Anchor,
+  Breadcrumbs,
+  LoadingOverlay,
+  Card,
+  ThemeIcon,
+  Timeline,
+  rem
+} from "@mantine/core";
+import { IconX, IconCircleCheck, IconShoppingCart, IconUser, IconTruckDelivery, IconCreditCard, IconArrowLeft, IconAlertCircle, IconPackage, IconCalendarTime, IconReceipt } from "@tabler/icons-react";
+import Link from "next/link";
+
+// Define a more specific type for an order item
+interface OrderItem {
+  _id: string;
+  product: {
+    _id: string;
+    name: string;
+    images: { url: string }[];
+    price: number;
+    slug: string;
+  };
+  quantity: number;
+  price: number;
+  size?: string;
+  color?: string;
+  status: string;
+  cancelRequested?: boolean;
+  cancelReason?: string;
+}
+
+interface Order {
+  _id: string;
+  orderId: string;
+  user: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  orderItems: OrderItem[];
+  products: any[];
+  totalAmount: number;
+  status: string;
+  adminStatus?: string;
+  shippingAddress: {
+    name: string;
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    phone: string;
+  };
+  paymentMethod: string;
+  paymentId?: string;
+  isPaid: boolean;
+  deliveredAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AdminOrderViewPage = () => {
+  const params = useParams();
+  const router = useRouter();
+  const orderIdFromParams = params?.id;
+  const orderId = Array.isArray(orderIdFromParams) ? orderIdFromParams[0] : orderIdFromParams;
+  
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  // Function to get status badge color based on status
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'delivered':
+      case 'completed':
+        return 'green';
+      case 'confirmed':
+        return 'cyan';
+      case 'shipped':
+      case 'dispatched':
+        return 'indigo';
+      case 'cancelled':
+        return 'red';
+      case 'processing':
+        return 'blue';
+      default:
+        return 'gray';
+    }
+  };
+
+  const fetchOrderDetails = async () => {
+    if (orderId) {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await getOrderById(orderId as string);
+        if (result.success && result.order) {
+          const fetchedOrder = result.order as Order;
+          // The status from DB is likely website status, map it for admin display
+          fetchedOrder.adminStatus = mapWebsiteStatusToAdmin(fetchedOrder.status);
+          setOrder(fetchedOrder);
+          console.log("Order loaded successfully:", fetchedOrder);
+        } else {
+          console.error("Failed to fetch order details:", result.message);
+          setError(result.message || "Failed to fetch order details.");
+        }
+      } catch (err: any) {
+        console.error("Error fetching order:", err);
+        setError(err.message || "An error occurred while fetching order details.");
+        
+        // If we have retries left, try again
+        if (retryCount < 3) {
+          setRetryCount(prev => prev + 1);
+          setTimeout(fetchOrderDetails, 1000); // Wait for 1 second before retrying
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchOrderDetails();
+  }, [orderId]);
+
+  if (loading && !order) {
+    return (
+      <Container className="flex justify-center items-center h-[80vh]">
+        <Loader size="xl" />
+      </Container>
+    );
+  }
+
+  if (error && !order) {
+    return (
+      <Container>
+        <Alert title="Error" color="red" icon={<IconX />} mt="lg">
+          {error}
+          {retryCount < 3 && (
+            <Button 
+              onClick={() => setRetryCount(prev => prev + 1)} 
+              variant="outline" 
+              color="red" 
+              size="xs" 
+              mt="sm"
+            >
+              Retry
+            </Button>
+          )}
+        </Alert>
+        <Button onClick={() => router.back()} leftSection={<IconArrowLeft size={14} />} mt="md">
+          Go Back
+        </Button>
+      </Container>
+    );
+  }
+
+  if (!order) {
+    return (
+      <Container>
+        <Text mt="lg">Order not found.</Text>
+        <Button onClick={() => router.back()} leftSection={<IconArrowLeft size={14} />} mt="md">
+          Go Back
+        </Button>
+      </Container>
+    );
+  }
+
+  const breadcrumbItems = [
+    { title: "Dashboard", href: "/admin/dashboard" },
+    { title: "Orders", href: "/admin/dashboard/orders" },
+    { title: `Order #${order.orderId}`, href: `/admin/dashboard/orders/view/${order._id}` },
+  ].map((item, index) => (
+    <Anchor component={Link} href={item.href} key={index}>
+      {item.title}
+    </Anchor>
+  ));
+
+  // Format order timeline events
+  const orderEvents = [];
+  
+  // Add order creation
+  orderEvents.push({
+    title: 'Order Placed',
+    date: new Date(order.createdAt).toLocaleString(),
+    icon: <IconShoppingCart style={{ width: rem(18), height: rem(18) }} />,
+    color: 'blue'
+  });
+
+  // Add status changes if available
+  if (order.status !== 'pending') {
+    orderEvents.push({
+      title: `Status: ${order.adminStatus}`,
+      date: new Date(order.updatedAt).toLocaleString(),
+      icon: <IconPackage style={{ width: rem(18), height: rem(18) }} />,
+      color: getStatusColor(order.status)
+    });
+  }
+
+  // Add delivery info if delivered
+  if (order.deliveredAt) {
+    orderEvents.push({
+      title: 'Delivered',
+      date: new Date(order.deliveredAt).toLocaleString(),
+      icon: <IconTruckDelivery style={{ width: rem(18), height: rem(18) }} />,
+      color: 'green'
+    });
+  }
+
+  // Get order items from either orderItems or products array
+  const orderItems = (order.orderItems && order.orderItems.length > 0) 
+    ? order.orderItems 
+    : (order.products || []);
+
+  return (
+    <Container fluid p="lg">
+      <LoadingOverlay visible={loading} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
+      <Breadcrumbs mb="lg">{breadcrumbItems}</Breadcrumbs>
+      
+      <Paper p="xl" shadow="md" radius="md" mb="xl">
+        <Group justify="space-between" align="flex-start" mb="md">
+          <div>
+            <Title order={1} mb="xs">Order #{order.orderId}</Title>
+            <Text size="sm" c="dimmed">
+              Placed on: {new Date(order.createdAt).toLocaleString()}
+            </Text>
+          </div>
+          <Group>
+            <Badge 
+              color={order.isPaid ? "green" : "red"} 
+              variant="filled" 
+              size="lg"
+            >
+              {order.isPaid ? "Paid" : "Not Paid"}
+            </Badge>
+            <Badge 
+              color={getStatusColor(order.status)} 
+              variant="filled" 
+              size="lg"
+            >
+              {order.adminStatus || order.status}
+            </Badge>
+          </Group>
+        </Group>
+        
+        {error && (
+          <Alert title="Error" color="red" icon={<IconX />} my="md" withCloseButton onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        <Divider my="lg" />
+        
+        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="xl" mb="lg">
+          {/* Customer Details */}
+          <Card withBorder shadow="sm" radius="md" padding="lg">
+            <Group mb="md">
+              <ThemeIcon size="lg" variant="light" radius="md" color="blue">
+                <IconUser style={{ width: rem(20), height: rem(20) }} />
+              </ThemeIcon>
+              <Title order={4}>Customer Details</Title>
+            </Group>
+            <Text fw={500}>{order.user?.name || "N/A"}</Text>
+            <Text c="dimmed" mb="md">{order.user?.email || "N/A"}</Text>
+            <Divider my="sm" />
+            <Text fw={500} mb="xs">Shipping Address</Text>
+            <Text>{order.shippingAddress.name}</Text>
+            <Text>{order.shippingAddress.street}</Text>
+            <Text>
+              {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
+            </Text>
+            <Text>{order.shippingAddress.country}</Text>
+            <Text mt="xs">
+              <strong>Phone:</strong> {order.shippingAddress.phone}
+            </Text>
+          </Card>
+
+          {/* Payment Details */}
+          <Card withBorder shadow="sm" radius="md" padding="lg">
+            <Group mb="md">
+              <ThemeIcon size="lg" variant="light" radius="md" color="blue">
+                <IconCreditCard style={{ width: rem(20), height: rem(20) }} />
+              </ThemeIcon>
+              <Title order={4}>Payment Details</Title>
+            </Group>
+            <SimpleGrid cols={2} mb="md">
+              <Text>Method:</Text>
+              <Text fw={500}>{order.paymentMethod}</Text>
+              
+              <Text>Total Amount:</Text>
+              <Text fw={500}>₹{order.totalAmount.toFixed(2)}</Text>
+              
+              <Text>Payment Status:</Text>
+              <Badge color={order.isPaid ? "green" : "red"}>
+                {order.isPaid ? "Paid" : "Not Paid"}
+              </Badge>
+              
+              {order.paymentId && (
+                <>
+                  <Text>Transaction ID:</Text>
+                  <Text fw={500}>{order.paymentId}</Text>
+                </>
+              )}
+            </SimpleGrid>
+          </Card>
+          
+          {/* Order Timeline */}
+          <Card withBorder shadow="sm" radius="md" padding="lg">
+            <Group mb="md">
+              <ThemeIcon size="lg" variant="light" radius="md" color="blue">
+                <IconCalendarTime style={{ width: rem(20), height: rem(20) }} />
+              </ThemeIcon>
+              <Title order={4}>Order Timeline</Title>
+            </Group>
+            <Timeline active={orderEvents.length - 1} bulletSize={24} lineWidth={2}>
+              {orderEvents.map((event, index) => (
+                <Timeline.Item 
+                  key={index} 
+                  bullet={<ThemeIcon radius="xl" color={event.color} size={22}>{event.icon}</ThemeIcon>} 
+                  title={event.title}
+                >
+                  <Text size="sm" mt={4}>{event.date}</Text>
+                </Timeline.Item>
+              ))}
+            </Timeline>
+          </Card>
+        </SimpleGrid>
+        
+        {/* Order Items */}
+        <Card withBorder shadow="sm" radius="md" mb="lg">
+          <Group mb="md" p="md">
+            <ThemeIcon size="lg" variant="light" radius="md" color="blue">
+              <IconShoppingCart style={{ width: rem(20), height: rem(20) }} />
+            </ThemeIcon>
+            <Title order={3}>Order Items</Title>
+          </Group>
+          
+          {/* Cancellation Requests Check */}
+          {orderItems.some(item => item.cancelRequested) && (
+            <Alert 
+              title="Cancellation Requests" 
+              color="orange" 
+              icon={<IconAlertCircle />} 
+              mb="md" 
+              mx="md"
+            >
+              This order has {orderItems.filter(item => item.cancelRequested).length} pending cancellation request(s). 
+              Items with cancellation requests are marked with an orange indicator.
+            </Alert>
+          )}
+          
+          <div style={{ overflowX: 'auto' }}>
+            <Table striped highlightOnHover verticalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Product</Table.Th>
+                  <Table.Th>Details</Table.Th>
+                  <Table.Th>Unit Price</Table.Th>
+                  <Table.Th>Quantity</Table.Th>
+                  <Table.Th>Subtotal</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {orderItems.map((item: OrderItem | any) => (
+                  <Table.Tr key={item._id}>
+                    <Table.Td>
+                      <Group>
+                        <Image 
+                          src={item.product?.images?.[0]?.url || "/placeholder-image.png"} 
+                          alt={item.product?.name || "Product Image"} 
+                          width={50} 
+                          height={50} 
+                          fit="contain" 
+                          radius="sm" 
+                        />
+                        <div>
+                          <Anchor component={Link} href={`/admin/dashboard/product/view/${item.product?._id}`} size="sm" fw={500}>
+                            {item.product?.name || "N/A"}
+                          </Anchor>
+                          {item.product?.slug && <Text size="xs" c="dimmed">Slug: {item.product.slug}</Text>}
+                        </div>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      {item.size && <Text size="xs">Size: {item.size}</Text>}
+                      {item.color && <Text size="xs">Color: {item.color}</Text>}
+                    </Table.Td>
+                    <Table.Td>₹{item.price?.toFixed(2) || (item.product?.price?.toFixed(2) || "N/A")}</Table.Td>
+                    <Table.Td>{item.quantity}</Table.Td>
+                    <Table.Td>₹{(item.price * item.quantity).toFixed(2)}</Table.Td>
+                    <Table.Td>
+                      <Group>
+                        <Badge color={getStatusColor(item.status)}>
+                          {item.status}
+                        </Badge>
+                        {item.cancelRequested && (
+                          <Badge color="orange" variant="outline">
+                            Cancellation Requested
+                          </Badge>
+                        )}
+                      </Group>
+                      {item.cancelRequested && item.cancelReason && (
+                        <Text size="xs" mt="xs" c="dimmed">
+                          Reason: {item.cancelReason}
+                        </Text>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </div>
+          {orderItems.length === 0 && (
+            <Text py="lg" ta="center" c="dimmed">No items found in this order.</Text>
+          )}
+        </Card>
+        
+        {/* Order Summary */}
+        <Card withBorder shadow="sm" radius="md" p="lg" mb="lg">
+          <Group mb="md">
+            <ThemeIcon size="lg" variant="light" radius="md" color="blue">
+              <IconReceipt style={{ width: rem(20), height: rem(20) }} />
+            </ThemeIcon>
+            <Title order={4}>Order Summary</Title>
+          </Group>
+          
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
+            <div>
+              <Group position="apart" mb="xs">
+                <Text>Subtotal:</Text>
+                <Text fw={500}>₹{order.totalAmount.toFixed(2)}</Text>
+              </Group>
+              <Group position="apart">
+                <Text>Shipping:</Text>
+                <Text>Included</Text>
+              </Group>
+              <Divider my="sm" />
+              <Group position="apart">
+                <Text size="lg" fw={700}>Total:</Text>
+                <Text size="lg" fw={700}>₹{order.totalAmount.toFixed(2)}</Text>
+              </Group>
+            </div>
+            
+            <div>
+              <Text c="dimmed" size="sm">
+                <strong>Order ID:</strong> {order.orderId}
+              </Text>
+              <Text c="dimmed" size="sm">
+                <strong>Database ID:</strong> {order._id}
+              </Text>
+              <Text c="dimmed" size="sm">
+                <strong>Last Updated:</strong> {new Date(order.updatedAt).toLocaleString()}
+              </Text>
+            </div>
+          </SimpleGrid>
+        </Card>
+        
+        <Group justify="space-between">
+          <Button 
+            onClick={() => router.push('/admin/dashboard/orders')} 
+            leftSection={<IconArrowLeft size={14} />}
+            variant="outline"
+          >
+            Back to Orders List
+          </Button>
+        </Group>
+      </Paper>
+    </Container>
+  );
+};
+
+export default AdminOrderViewPage;

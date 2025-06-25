@@ -265,3 +265,143 @@ export async function sendCouponEmail(to: string, data: CouponEmailData) {
   }
 }
 
+interface VendorStatusEmailData {
+  vendorName: string;
+  vendorEmail: string;
+  status: 'approved' | 'rejected';
+  message?: string;
+  loginUrl?: string;
+}
+
+export async function sendVendorStatusEmail(data: VendorStatusEmailData) {
+  const { vendorName, vendorEmail, status, message, loginUrl } = data;
+  const companyName = getCompanyName();
+  
+  const isApproved = status === 'approved';
+  const subject = `${companyName} Vendor Application ${isApproved ? 'Approved' : 'Rejected'}`;
+  
+  let htmlBody = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: ${isApproved ? '#28a745' : '#dc3545'};">
+          ${isApproved ? '🎉 Congratulations!' : '❌ Application Update'}
+        </h1>
+      </div>
+      
+      <p>Dear ${vendorName},</p>
+      
+      ${isApproved ? `
+        <p>We're excited to inform you that your vendor application with ${companyName} has been <strong style="color: #28a745;">APPROVED</strong>!</p>
+        <p>You can now access your vendor dashboard and start managing your products and orders.</p>
+        
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="${loginUrl || process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3001'}/vendor/signin" 
+             style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+            Access Vendor Dashboard
+          </a>
+        </div>
+        
+        <h3>Next Steps:</h3>
+        <ul>
+          <li>Login to your vendor dashboard</li>
+          <li>Complete your vendor profile</li>
+          <li>Add your first products</li>
+          <li>Start receiving orders</li>
+        </ul>
+      ` : `
+        <p>Thank you for your interest in becoming a vendor with ${companyName}. Unfortunately, your application has been <strong style="color: #dc3545;">rejected</strong> at this time.</p>
+        
+        ${message ? `
+          <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <strong>Reason:</strong> ${message}
+          </div>
+        ` : ''}
+        
+        <p>You're welcome to reapply in the future. Please ensure you meet all our vendor requirements before submitting a new application.</p>
+      `}
+      
+      <p>If you have any questions, please don't hesitate to contact our support team.</p>
+      
+      <p>Best regards,<br>
+      The ${companyName} Team</p>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #777; font-size: 12px;">
+        <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await sendEmail({
+      to: vendorEmail,
+      subject,
+      html: htmlBody,
+    });
+    console.log(`Vendor ${status} email sent successfully to: ${vendorEmail}`);
+    return { success: true, message: `Vendor ${status} email sent successfully.` };
+  } catch (error: any) {
+    console.error(`Error sending vendor ${status} email to ${vendorEmail}:`, error);
+    return { success: false, message: error.message || `Failed to send vendor ${status} email.` };
+  }
+}
+
+export async function sendVendorWelcomeEmail(vendorData: {
+  name: string;
+  email: string;
+  loginUrl?: string;
+}) {
+  const { name, email, loginUrl } = vendorData;
+  const companyName = getCompanyName();
+  
+  const subject = `Welcome to ${companyName} - Vendor Registration Received`;
+  
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #007bff;">Welcome to ${companyName}!</h1>
+      </div>
+      
+      <p>Dear ${name},</p>
+      
+      <p>Thank you for your interest in becoming a vendor with ${companyName}. We have received your application and it is currently under review.</p>
+      
+      <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #0c5460;">⏳ Application Status: Pending Review</h3>
+        <p style="margin-bottom: 0;">Our team will review your application and notify you of the decision within 2-3 business days.</p>
+      </div>
+      
+      <h3>What happens next?</h3>
+      <ul>
+        <li>Our team will review your vendor application</li>
+        <li>We may contact you if additional information is needed</li>
+        <li>You'll receive an email notification once your application is processed</li>
+        <li>If approved, you'll get access to the vendor dashboard</li>
+      </ul>
+      
+      <p>If you have any questions about your application, please contact our vendor support team.</p>
+      
+      <p>Thank you for choosing ${companyName}!</p>
+      
+      <p>Best regards,<br>
+      The ${companyName} Team</p>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #777; font-size: 12px;">
+        <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject,
+      html: htmlBody,
+    });
+    console.log(`Vendor welcome email sent successfully to: ${email}`);
+    return { success: true, message: 'Vendor welcome email sent successfully.' };
+  } catch (error: any) {
+    console.error(`Error sending vendor welcome email to ${email}:`, error);
+    return { success: false, message: error.message || 'Failed to send vendor welcome email.' };
+  }
+}
+

@@ -23,6 +23,8 @@ import { CheckCircle, Description as IconFileDescription, HelpOutline } from "@m
 // import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link"; // Added Link import
+import { VendorBadge } from "@/components/admin/VendorBadge";
+import { getVendorDisplayInfo } from "@/lib/utils/vendor-utils";
 
 // Snackbar and Alert were already imported, ensure they are used in AllOrdersTable
 import {
@@ -176,7 +178,14 @@ function Row(props: RowProps) { // Use defined RowProps
       return;
     }
 
-    const newStatus = e?.target?.value;
+    // Add null check for event and event.target
+    if (!e || !e.target || e.target.value === undefined || e.target.value === null) {
+      showSnackbar("Invalid event or missing value", "error");
+      console.error("Invalid event object:", e);
+      return;
+    }
+
+    const newStatus = e.target.value;
     if (!newStatus || typeof newStatus !== 'string' || newStatus.trim() === '') {
       showSnackbar("Invalid status value provided.", "error");
       console.error("Invalid status value:", newStatus);
@@ -581,14 +590,27 @@ function Row(props: RowProps) { // Use defined RowProps
                                   (e.target as HTMLImageElement).src = "/placeholder-image.jpg";
                                 }}
                               />
-                              {p.vendor && (
-                                <div className="absolute top-0 right-0 bg-[#EB4F0C] text-white text-[10px] p-2">
-                                  {p.vendor.name}
-                                </div>
-                              )}
+                              {/* Enhanced vendor display using VendorBadge */}
+                              <div className="absolute top-0 right-0">
+                                <VendorBadge 
+                                  vendor={p.vendor || p.product?.vendor} 
+                                  vendorId={p.vendorId || p.product?.vendorId}
+                                  size="sm"
+                                />
+                              </div>
                             </div>
                           </TableCell>
-                          <TableCell>{p.product?.name || p.name || "N/A"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span>{p.product?.name || p.name || "N/A"}</span>
+                              <VendorBadge 
+                                vendor={p.vendor || p.product?.vendor} 
+                                vendorId={p.vendorId || p.product?.vendorId}
+                                size="sm"
+                                showEmail={false}
+                              />
+                            </div>
+                          </TableCell>
                           <TableCell align="left">{p.product?.sku || p.sku || "N/A"}</TableCell>
                           <TableCell align="left">{p.product?.brand || p.brand || "N/A"}</TableCell>
                           <TableCell align="left">{p.size || "N/A"}</TableCell>
@@ -783,17 +805,21 @@ export default function AllOrdersTable({
   setIsPaid,
   paymentMethod,
   setPaymentMethod,
+  vendorFilter,
+  setVendorFilter,
   updateOrderStatus,
   markOrderAsOld,
   refreshOrders,
 }: {
   rows: any[];
   range?: any;
-  setRange?: any; // Should be (event: SelectChangeEvent<any>) => void or similar
+  setRange?: any;
   isPaid?: any;
-  setIsPaid?: any; // Should be (event: SelectChangeEvent<any>) => void or similar
+  setIsPaid?: any;
   paymentMethod?: any;
-  setPaymentMethod?: any; // Should be (event: SelectChangeEvent<any>) => void or similar
+  setPaymentMethod?: any;
+  vendorFilter?: string;
+  setVendorFilter?: (value: string) => void;
   updateOrderStatus: (orderId: string, productId: string | null, status: string, customMessage?: string, trackingUrl?: string, trackingId?: string) => Promise<any>;
   markOrderAsOld: (orderId: string) => Promise<any>;
   refreshOrders: () => void;
@@ -826,6 +852,44 @@ export default function AllOrdersTable({
       setFilteredRowsByText([]);
     }
   }, [searchOrderText, rows]);
+
+  // Extract unique vendors from orders
+  const uniqueVendors = React.useMemo(() => {
+    const vendorSet = new Set<string>();
+    rows?.forEach(row => {
+      // Check products array
+      row.products?.forEach((product: any) => {
+        const { name } = getVendorDisplayInfo(product.vendor, product.vendorId);
+        if (name !== 'Unknown Vendor') {
+          vendorSet.add(name);
+        }
+      });
+      // Check orderItems array
+      row.orderItems?.forEach((item: any) => {
+        const { name } = getVendorDisplayInfo(item.vendor, item.vendorId);
+        if (name !== 'Unknown Vendor') {
+          vendorSet.add(name);
+        }
+      });
+    });
+    return Array.from(vendorSet).sort();
+  }, [rows]);
+
+  // Filter rows by vendor
+  const filteredRows = React.useMemo(() => {
+    if (!vendorFilter) return rows;
+    
+    return rows?.filter(row => {
+      // Check if any product in the order matches the vendor filter
+      const products = row.products || row.orderItems || [];
+      return products.some((product: any) => {
+        const { name } = getVendorDisplayInfo(product.vendor, product.vendorId);
+        return name === vendorFilter;
+      });
+    });
+  }, [rows, vendorFilter]);
+
+  const displayRows = searchOrderText.length === 24 ? filteredRowsByText : filteredRows;
 
   return (
     <>
@@ -963,6 +1027,21 @@ export default function AllOrdersTable({
                 </MenuItem>
               ))}
             </Select>
+
+            <Select
+              label="Filter by Vendor"
+              value={vendorFilter || "-"}
+              onChange={(event) => setVendorFilter(event.target.value === "-" ? "" : event.target.value)}
+              displayEmpty
+              inputProps={{ 'aria-label': 'Without label' }}
+            >
+              <MenuItem value="-">All Vendors</MenuItem>
+              {uniqueVendors.map((vendor) => (
+                <MenuItem key={vendor} value={vendor}>
+                  {vendor}
+                </MenuItem>
+              ))}
+            </Select>
           </div>
         </div>
 
@@ -1007,7 +1086,7 @@ export default function AllOrdersTable({
                       showSnackbar={showSnackbar} // Pass showSnackbar to Row
                     />
                   ))
-                : rows?.map((row: any) => (
+                : displayRows?.map((row: any) => (
                     <Row 
                       key={row._id} 
                       row={row} 

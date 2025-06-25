@@ -19,16 +19,33 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { visuallyHidden } from "@mui/utils";
 import styles from "./styles.module.css";
 import { RiDeleteBin7Fill } from "react-icons/ri";
 import { deleteSingleUser } from "@/lib/database/actions/admin/user/user.actions";
-import { FaCheckCircle } from "react-icons/fa";
+import { FaCheckCircle, FaClock, FaUser } from "react-icons/fa";
 import { IoMdCloseCircle } from "react-icons/io";
 import {
   ChangeVerifyTagForVendor,
   getAllVendors,
 } from "@/lib/database/actions/admin/vendor.actions";
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  Snackbar,
+  Alert,
+  Badge,
+  Stack,
+  CircularProgress,
+} from "@mui/material";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 function descendingComparator(a: any, b: any, orderBy: any) {
   if (b[orderBy] < a[orderBy]) {
@@ -110,7 +127,12 @@ const headCells = [
     disablePadding: false,
     label: "Verified",
   },
-
+  {
+    id: "view",
+    numeric: true,
+    disablePadding: false,
+    label: "View",
+  },
   {
     id: "delete",
     numeric: true,
@@ -182,7 +204,7 @@ EnhancedTableHead.propTypes = {
 };
 
 function EnhancedTableToolbar(props: any) {
-  const { numSelected } = props;
+  const { numSelected, pendingCount, verifiedCount, totalCount } = props;
 
   return (
     <Toolbar
@@ -198,25 +220,39 @@ function EnhancedTableToolbar(props: any) {
         }),
       }}
     >
-      {numSelected > 0 ? (
-        <Typography
-          sx={{ flex: "1 1 100%" }}
-          color="inherit"
-          variant="subtitle1"
-          component="div"
-        >
-          {numSelected} selected
-        </Typography>
-      ) : (
-        <Typography
-          sx={{ flex: "1 1 100%" }}
-          variant="h6"
-          id="tableTitle"
-          component="div"
-        >
-          Users
-        </Typography>
-      )}
+      <Stack direction="row" spacing={2} sx={{ flex: "1 1 100%" }}>
+        {numSelected > 0 ? (
+          <Typography color="inherit" variant="subtitle1" component="div">
+            {numSelected} selected
+          </Typography>
+        ) : (
+          <>
+            <Typography variant="h6" id="tableTitle" component="div">
+              Vendor Management
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Chip
+                label={`Total: ${totalCount}`}
+                color="default"
+                size="small"
+                icon={<FaUser />}
+              />
+              <Chip
+                label={`Pending: ${pendingCount}`}
+                color="warning"
+                size="small"
+                icon={<FaClock />}
+              />
+              <Chip
+                label={`Verified: ${verifiedCount}`}
+                color="success"
+                size="small"
+                icon={<FaCheckCircle />}
+              />
+            </Stack>
+          </>
+        )}
+      </Stack>
 
       {numSelected > 0 ? (
         <Tooltip title="Delete">
@@ -240,12 +276,33 @@ EnhancedTableToolbar.propTypes = {
 };
 
 export default function EnhancedTableVendors({ rows }: { rows: any }) {
+  const router = useRouter();
   const [order, setOrder] = React.useState("asc");
   const [orderBy, setOrderBy] = React.useState("calories");
   const [selected, setSelected] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(0);
   const [dense, setDense] = React.useState(false);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
+
+  // Enhanced state for better UX
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    type: "", // 'approve', 'reject', 'delete'
+    vendorId: "",
+    vendorName: "",
+    currentStatus: false,
+  });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success" as "success" | "error" | "warning" | "info",
+  });
+  const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+
+  // Calculate statistics
+  const pendingCount = rows.filter((row: any) => !row.verified).length;
+  const verifiedCount = rows.filter((row: any) => row.verified).length;
+  const totalCount = rows.length;
 
   const handleRequestSort = (event: any, property: any) => {
     const isAsc = orderBy === property && order === "asc";
@@ -297,16 +354,171 @@ export default function EnhancedTableVendors({ rows }: { rows: any }) {
   const emptyRows =
     page > 0 ? Math.max(0, (1 + page) * rowsPerPage - rows.length) : 0;
 
+  const handleVendorStatusChange = async (
+    vendorId: string,
+    newStatus: boolean,
+    vendorName: string
+  ) => {
+    setConfirmDialog({
+      open: true,
+      type: newStatus ? "approve" : "reject",
+      vendorId,
+      vendorName,
+      currentStatus: !newStatus,
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const { type, vendorId, vendorName } = confirmDialog;
+    const newStatus = type === "approve";
+
+    setLoading((prev) => ({ ...prev, [vendorId]: true }));
+
+    try {
+      // Use the new API endpoint instead of direct database call
+      const response = await fetch('/api/vendor/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vendorId,
+          status: newStatus,
+          message: type === 'reject' ? 'Your application did not meet our current requirements.' : undefined
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSnackbar({
+          open: true,
+          message: `${vendorName} has been ${newStatus ? "approved" : "rejected"} successfully and notified via email!`,
+          severity: "success",
+        });
+
+        // Trigger a refresh of the vendors list
+        window.location.reload(); // You might want to implement a more elegant refresh
+      } else {
+        throw new Error(result.message || `Failed to ${newStatus ? "approve" : "reject"} vendor`);
+      }
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.message || `Failed to ${newStatus ? "approve" : "reject"} vendor`,
+        severity: "error",
+      });
+    } finally {
+      setLoading((prev) => ({ ...prev, [vendorId]: false }));
+      setConfirmDialog({
+        open: false,
+        type: "",
+        vendorId: "",
+        vendorName: "",
+        currentStatus: false,
+      });
+    }
+  };
+
+  const handleDeleteVendor = async (vendorId: string, vendorName: string) => {
+    setConfirmDialog({
+      open: true,
+      type: "delete",
+      vendorId,
+      vendorName,
+      currentStatus: false,
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { vendorId, vendorName } = confirmDialog;
+
+    setLoading((prev) => ({ ...prev, [vendorId]: true }));
+
+    try {
+      await deleteHandler(vendorId);
+      setSnackbar({
+        open: true,
+        message: `${vendorName} has been deleted successfully!`,
+        severity: "success",
+      });
+
+      // Trigger a refresh
+      window.location.reload();
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.message || "Failed to delete vendor",
+        severity: "error",
+      });
+    } finally {
+      setLoading((prev) => ({ ...prev, [vendorId]: false }));
+      setConfirmDialog({
+        open: false,
+        type: "",
+        vendorId: "",
+        vendorName: "",
+        currentStatus: false,
+      });
+    }
+  };
+
+  const getActionDialogContent = () => {
+    const { type, vendorName } = confirmDialog;
+
+    switch (type) {
+      case "approve":
+        return {
+          title: "Approve Vendor",
+          content: `Are you sure you want to approve "${vendorName}"? This will allow them to login and access the vendor dashboard.`,
+          confirmText: "Approve",
+          confirmColor: "success" as const,
+        };
+      case "reject":
+        return {
+          title: "Reject Vendor",
+          content: `Are you sure you want to reject "${vendorName}"? This will prevent them from logging in until approved.`,
+          confirmText: "Reject",
+          confirmColor: "warning" as const,
+        };
+      case "delete":
+        return {
+          title: "Delete Vendor",
+          content: `Are you sure you want to permanently delete "${vendorName}"? This action cannot be undone and will also delete all associated products.`,
+          confirmText: "Delete",
+          confirmColor: "error" as const,
+        };
+      default:
+        return {
+          title: "",
+          content: "",
+          confirmText: "Confirm",
+          confirmColor: "primary" as const,
+        };
+    }
+  };
+
+  const dialogContent = getActionDialogContent();
+
+  const handleViewVendor = (e: React.MouseEvent, vendorId: string) => {
+    e.stopPropagation();
+    router.push(`/admin/dashboard/vendors/view/${vendorId}`);
+  };
+
   return (
     <>
       <div className="">
-        <h1 className="text-black font-bold text-2xl">
-          {" "}
-          Total Vendors - {rows.length}
+        <h1 className="text-black font-bold text-2xl mb-4">
+          Vendor Management Dashboard
         </h1>
         <Box sx={{ width: "100%" }}>
           <Paper sx={{ width: "100%", mb: 2 }}>
-            <EnhancedTableToolbar numSelected={selected.length} />
+            <EnhancedTableToolbar
+              numSelected={selected.length}
+              pendingCount={pendingCount}
+              verifiedCount={verifiedCount}
+              totalCount={totalCount}
+            />
 
             <TableContainer>
               <Table
@@ -324,13 +536,12 @@ export default function EnhancedTableVendors({ rows }: { rows: any }) {
                   rowCount={rows.length}
                 />
                 <TableBody>
-                  {/* if you don't need to support IE11, you can replace the `stableSort` call with:
-                 rows.sort(getComparator(order, orderBy)).slice() */}
                   {stableSort(rows, getComparator(order, orderBy))
                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                     .map((row: any, index: any) => {
                       const isItemSelected = isSelected(row.name);
                       const labelId = `enhanced-table-checkbox-${index}`;
+                      const isLoading = loading[row._id];
 
                       return (
                         <TableRow
@@ -359,63 +570,103 @@ export default function EnhancedTableVendors({ rows }: { rows: any }) {
                             style={{ paddingTop: "5px" }}
                           >
                             <img
-                              src={row.image}
-                              alt=""
+                              src={row.image || "/default-vendor-avatar.png"}
+                              alt={`${row.name} avatar`}
                               className={styles.table__img}
                             />
                           </TableCell>
-                          <TableCell align="right">{row.name}</TableCell>
+                          <TableCell align="right">
+                            <Stack direction="column" spacing={0.5}>
+                              <Typography variant="body2" fontWeight="medium">
+                                {row.name}
+                              </Typography>
+                              <Chip
+                                label={row.verified ? "Verified" : "Pending"}
+                                size="small"
+                                color={row.verified ? "success" : "warning"}
+                                variant={
+                                  row.verified ? "filled" : "outlined"
+                                }
+                              />
+                            </Stack>
+                          </TableCell>
                           <TableCell align="right">{row.email}</TableCell>
                           <TableCell align="right">{row.phoneNumber}</TableCell>
                           <TableCell align="right">{row.zipCode}</TableCell>
 
                           <TableCell align="right">
-                            <div className="">
-                              {row.verified ? (
-                                <FaCheckCircle
-                                  color="green"
-                                  size={30}
-                                  onClick={async () => {
-                                    await ChangeVerifyTagForVendor(
-                                      row._id,
-                                      false
-                                    ).then(async (res) => {
-                                      if (res?.success) {
-                                        alert(res?.message);
-                                      } else {
-                                        alert(res?.message);
-                                      }
-                                    });
-                                  }}
-                                />
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              justifyContent="flex-end"
+                            >
+                              {isLoading ? (
+                                <CircularProgress size={24} />
                               ) : (
-                                <IoMdCloseCircle
-                                  color="red"
-                                  size={30}
-                                  onClick={async () => {
-                                    await ChangeVerifyTagForVendor(
-                                      row._id,
-                                      true
-                                    ).then((res) => {
-                                      if (res?.success) {
-                                        alert(res?.message);
-                                      } else {
-                                        alert(res?.message);
-                                      }
-                                    });
-                                  }}
-                                />
+                                <>
+                                  {row.verified ? (
+                                    <Tooltip title="Click to reject this vendor">
+                                      <IconButton
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleVendorStatusChange(
+                                            row._id,
+                                            false,
+                                            row.name
+                                          );
+                                        }}
+                                        color="success"
+                                      >
+                                        <FaCheckCircle size={24} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip title="Click to approve this vendor">
+                                      <IconButton
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleVendorStatusChange(
+                                            row._id,
+                                            true,
+                                            row.name
+                                          );
+                                        }}
+                                        color="warning"
+                                      >
+                                        <IoMdCloseCircle size={24} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </>
                               )}
-                            </div>
+                            </Stack>
                           </TableCell>
 
                           <TableCell align="right">
-                            <div
-                              className=""
-                              onClick={() => deleteHandler(row._id)}
-                            >
-                              <RiDeleteBin7Fill />
-                            </div>
+                            <Tooltip title="View vendor details">
+                              <IconButton
+                                onClick={(e) => handleViewVendor(e, row._id)}
+                                color="primary"
+                                disabled={isLoading}
+                              >
+                                <VisibilityIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+
+                          <TableCell align="right">
+                            <Tooltip title="Delete vendor">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteVendor(row._id, row.name);
+                                }}
+                                color="error"
+                                disabled={isLoading}
+                              >
+                                <RiDeleteBin7Fill />
+                              </IconButton>
+                            </Tooltip>
                           </TableCell>
                         </TableRow>
                       );
@@ -426,7 +677,7 @@ export default function EnhancedTableVendors({ rows }: { rows: any }) {
                         height: (dense ? 33 : 53) * emptyRows,
                       }}
                     >
-                      <TableCell colSpan={6} />
+                      <TableCell colSpan={8} />
                     </TableRow>
                   )}
                 </TableBody>
@@ -444,6 +695,71 @@ export default function EnhancedTableVendors({ rows }: { rows: any }) {
           </Paper>
         </Box>
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() =>
+          setConfirmDialog({
+            open: false,
+            type: "",
+            vendorId: "",
+            vendorName: "",
+            currentStatus: false,
+          })
+        }
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{dialogContent.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            {dialogContent.content}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setConfirmDialog({
+                open: false,
+                type: "",
+                vendorId: "",
+                vendorName: "",
+                currentStatus: false,
+              })
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={
+              confirmDialog.type === "delete"
+                ? handleConfirmDelete
+                : handleConfirmAction
+            }
+            color={dialogContent.confirmColor}
+            variant="contained"
+            autoFocus
+          >
+            {dialogContent.confirmText}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Success/Error Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

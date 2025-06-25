@@ -6,6 +6,7 @@ import slugify from "slugify";
 import cloudinary from "cloudinary";
 import mongoose from "mongoose";
 import { User } from "lucide-react";
+import { getCurrentUserContext, getProductsForCurrentUser } from "@/lib/role-utils";
 const { ObjectId } = mongoose.Types;
 
 // config our Cloudinary
@@ -39,6 +40,15 @@ export const createProduct = async (
 ) => {
   try {
     await connectToDatabase();
+
+    // Get current user context to set vendorId
+    const userContext = await getCurrentUserContext();
+    if (!userContext.isAuthenticated) {
+      return {
+        message: "You must be logged in to create products",
+        success: false,
+      };
+    }
 
     if (parent) {
       const Parent: any = await Product.findById(parent);
@@ -112,6 +122,11 @@ export const createProduct = async (
         subCategories,
         subProducts: [subProductData],
         featured,
+        // Add vendorId based on user role
+        vendorId: userContext.userId,
+        vendor: userContext.name,
+        // Store the role explicitly
+        createdBy: userContext.role, // 'admin' or 'vendor'
         // Also store direct price/quantity at product level if no sizes
         ...((!sizes || sizes.length === 0) && {
           price: price,
@@ -138,6 +153,20 @@ export const createProduct = async (
 export const deleteProduct = async (productId: string) => {
   try {
     await connectToDatabase();
+
+    // Check user authorization
+    const userContext = await getCurrentUserContext();
+    
+    // Check if product belongs to current vendor (if not admin)
+    if (userContext.role === 'vendor') {
+      const product = await Product.findById(productId);
+      if (!product || product.vendorId?.toString() !== userContext.userId) {
+        return {
+          message: "You are not authorized to delete this product",
+          success: false,
+        };
+      }
+    }
 
     // 1. Find the product first to get image public_ids
     const product = await Product.findById(productId);
@@ -169,6 +198,7 @@ export const deleteProduct = async (productId: string) => {
         );
         const results = await Promise.all(deletePromises);
         console.log("Cloudinary deletion results:", results);
+        
         // Optional: Check results for errors, though destroy often returns { result: 'ok' } or { result: 'not found' }
       } catch (cloudinaryError) {
         console.error("Error deleting images from Cloudinary:", cloudinaryError);
@@ -218,6 +248,20 @@ export const updateProduct = async (
 ) => {
   try {
     await connectToDatabase();
+    
+    // Check user authorization
+    const userContext = await getCurrentUserContext();
+    
+    // Check if product belongs to current vendor (if not admin)
+    if (userContext.role === 'vendor') {
+      const productCheck = await Product.findById(productId);
+      if (!productCheck || productCheck.vendorId?.toString() !== userContext.userId) {
+        return {
+          message: "You are not authorized to update this product",
+          success: false,
+        };
+      }
+    }
     
     const product: any = await Product.findById(productId);
     if (!product) {
@@ -321,6 +365,18 @@ export const getSingleProductById = async (
       size = 0;
     }
     const product: any = await Product.findById(id).lean();
+    
+    // Check user authorization for vendors
+    if (product) {
+      const userContext = await getCurrentUserContext();
+      if (userContext.role === 'vendor' && product.vendorId?.toString() !== userContext.userId) {
+        return {
+          message: "You are not authorized to view this product",
+          success: false,
+        };
+      }
+    }
+    
     const discount = product.subProducts[style].discount;
     const priceBefore = product.subProducts[style].sizes[size].price;
     const price = discount ? priceBefore - priceBefore / discount : priceBefore;
@@ -339,13 +395,16 @@ export const getSingleProductById = async (
         brand: product.brand,
         category: product.category,
         subCategories: product.subCategories,
+        details: product.details,
+        questions: product.questions,
         shipping: product.shipping,
         images: product.subProducts[style].images,
         size: product.subProducts[style].sizes[size].size,
         price,
         priceBefore,
-
         quantity: product.subProducts[style].sizes[size].qty,
+        vendor: product.vendor,
+        vendorId: product.vendorId
       })
     );
   } catch (error: any) {
@@ -358,13 +417,27 @@ export const getAllProducts = async () => {
   try {
     await connectToDatabase();
 
+    // Fetch all products
     const products = await Product.find()
       .sort({ updateAt: -1 })
       .populate({ path: "category", model: Category })
       .lean();
-    return JSON.parse(JSON.stringify(products));
+    
+    // Filter products based on user role
+    const userContext = await getCurrentUserContext();
+    let filteredProducts = products;
+    
+    if (userContext.role === 'vendor' && userContext.userId) {
+      // Filter products for vendor
+      filteredProducts = products.filter(product => 
+        product.vendorId && product.vendorId.toString() === userContext.userId
+      );
+    }
+    
+    return JSON.parse(JSON.stringify(filteredProducts));
   } catch (error: any) {
     console.log(error);
+    return [];
   }
 };
 
@@ -383,6 +456,17 @@ export const getEntireProductById = async (id: string) => {
         success: false,
       };
     }
+    
+    // Check user authorization for vendors
+    const userContext = await getCurrentUserContext();
+    if (userContext.role === 'vendor' && product.vendorId?.toString() !== userContext.userId) {
+      return {
+        message: "You are not authorized to view this product",
+        product: null,
+        success: false,
+      };
+    }
+    
     return {
       product: JSON.parse(JSON.stringify(product)),
       message: "Successfully found product",
@@ -404,13 +488,28 @@ export const getParentsandCategories = async () => {
     await connectToDatabase();
     const results = await Product.find().select("name subProducts").lean();
     const categories = await Category.find().lean();
+    
+    // Filter parent products based on user role
+    const userContext = await getCurrentUserContext();
+    let filteredResults = results;
+    
+    if (userContext.role === 'vendor' && userContext.userId) {
+      filteredResults = results.filter(product => 
+        product.vendorId && product.vendorId.toString() === userContext.userId
+      );
+    }
+    
     return {
       success: true,
-      parents: JSON.parse(JSON.stringify(results)),
+      parents: JSON.parse(JSON.stringify(filteredResults)),
       categories: JSON.parse(JSON.stringify(categories)),
     };
   } catch (error: any) {
     console.log(error);
+    return {
+      success: false,
+      message: "Failed to fetch parents and categories",
+    };
   }
 };
 
@@ -421,6 +520,18 @@ export const switchFeaturedProduct = async (
 ) => {
   try {
     await connectToDatabase();
+    
+    // Check user authorization
+    const userContext = await getCurrentUserContext();
+    
+    // Only admins can set featured products
+    if (userContext.role !== 'admin') {
+      return {
+        message: "Only administrators can set featured products",
+        success: false,
+      };
+    }
+    
     const product = await Product.findByIdAndUpdate(productId, {
       featured: value,
     });
@@ -436,6 +547,10 @@ export const switchFeaturedProduct = async (
     };
   } catch (error: any) {
     console.log(error);
+    return {
+      message: "Error setting featured status",
+      success: false,
+    };
   }
 };
 
@@ -472,11 +587,30 @@ export const getLatestProductReviews = async () => {
       },
       { $sort: { "review.reviewCreatedAt": -1 } },
     ]);
+    
+    // Filter reviews based on user role
+    const userContext = await getCurrentUserContext();
+    let filteredReviews = reviews;
+    
+    if (userContext.role === 'vendor' && userContext.userId) {
+      // Get all product IDs belonging to this vendor
+      const vendorProducts = await Product.find({ vendorId: userContext.userId }).select('_id').lean();
+      const vendorProductIds = vendorProducts.map(p => p._id.toString());
+      
+      // Filter reviews to only include those for vendor's products
+      filteredReviews = reviews.filter(review => 
+        vendorProductIds.includes(review.productId.toString())
+      );
+    }
+    
     return {
-      reviews: JSON.parse(JSON.stringify(reviews)),
+      reviews: JSON.parse(JSON.stringify(filteredReviews)),
     };
   } catch (error) {
     console.log(error);
+    return {
+      reviews: [],
+    };
   }
 };
 
@@ -493,9 +627,104 @@ export const handleVerificationChange = async (id: string, value: boolean) => {
     if (!product) {
       return { message: "Review not found", success: false };
     }
+    
+    // Check user authorization for vendors
+    const userContext = await getCurrentUserContext();
+    if (userContext.role === 'vendor' && product.vendorId?.toString() !== userContext.userId) {
+      return {
+        message: "You are not authorized to verify reviews for this product",
+        success: false,
+      };
+    }
+    
     return { message: "Successfully updated review", success: true };
   } catch (error) {
     console.log(error);
+    return { 
+      message: "Error updating review verification status", 
+      success: false 
+    };
+  }
+};
+
+// delete a product review
+export const deleteProductReview = async (reviewId: string) => {
+  try {
+    await connectToDatabase();
+    
+    // First, find the product containing this review to check authorization
+    const product = await Product.findOne({ "reviews._id": reviewId });
+    
+    if (!product) {
+      return { 
+        success: false, 
+        message: "Review not found" 
+      };
+    }
+    
+    // Check user authorization for vendors
+    const userContext = await getCurrentUserContext();
+    if (userContext.role === 'vendor' && product.vendorId?.toString() !== userContext.userId) {
+      return {
+        success: false,
+        message: "You are not authorized to delete reviews for this product"
+      };
+    }
+    
+    // Get the review to be deleted for calculating new average rating
+    const reviewToDelete = product.reviews.find(
+      (review: any) => review._id.toString() === reviewId
+    );
+    
+    if (!reviewToDelete) {
+      return { 
+        success: false, 
+        message: "Review not found" 
+      };
+    }
+    
+    // Remove the review from the product
+    const result = await Product.updateOne(
+      { _id: product._id },
+      { $pull: { reviews: { _id: reviewId } } }
+    );
+    
+    if (result.modifiedCount === 0) {
+      return { 
+        success: false, 
+        message: "Failed to delete review" 
+      };
+    }
+    
+    // Update the product's rating and numReviews
+    const updatedProduct = await Product.findById(product._id);
+    
+    if (updatedProduct) {
+      updatedProduct.numReviews = updatedProduct.reviews.length;
+      
+      // Recalculate the average rating if there are still reviews
+      if (updatedProduct.reviews.length > 0) {
+        updatedProduct.rating = 
+          updatedProduct.reviews.reduce((total: number, r: any) => total + r.rating, 0) / 
+          updatedProduct.reviews.length;
+      } else {
+        // If no reviews left, reset rating to 0
+        updatedProduct.rating = 0;
+      }
+      
+      await updatedProduct.save();
+    }
+    
+    return { 
+      success: true, 
+      message: "Review deleted successfully" 
+    };
+  } catch (error: any) {
+    console.error("Error deleting review:", error);
+    return { 
+      success: false, 
+      message: error.message || "Failed to delete review" 
+    };
   }
 };
 
@@ -512,6 +741,15 @@ export const updateProductImages = async (
     if (!product) {
       return {
         message: "Product not found",
+        success: false,
+      };
+    }
+    
+    // Check user authorization for vendors
+    const userContext = await getCurrentUserContext();
+    if (userContext.role === 'vendor' && product.vendorId?.toString() !== userContext.userId) {
+      return {
+        message: "You are not authorized to update images for this product",
         success: false,
       };
     }

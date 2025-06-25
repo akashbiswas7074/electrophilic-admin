@@ -7,13 +7,65 @@ import {
 } from "@/lib/database/actions/admin/products/products.actions";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useRouter } from "next/navigation";
-import { FaEdit, FaSearchPlus } from "react-icons/fa";
+import { FaEdit, FaSearchPlus, FaUser } from "react-icons/fa";
 import { RiDeleteBin6Fill } from "react-icons/ri";
-import { Drawer, Switch, Text, Modal, SimpleGrid, Image, Button, Group, FileButton } from "@mantine/core"; // Added FileButton
+import { Drawer, Switch, Text, Modal, SimpleGrid, Image, Button, Group, FileButton, Badge, Avatar, Tooltip } from "@mantine/core"; // Added Badge, Avatar, Tooltip
 import { useState } from "react";
 import UpdateProductComponent from "./update.product";
 import { modals } from "@mantine/modals";
 import { toast } from "@/hooks/use-toast";
+
+// Create a reusable VendorBadge component
+const VendorBadge = ({ vendor, vendorId, showEmail = false, isAdmin = false }) => {
+  if (!vendor && !isAdmin) return <Text size="sm" color="dimmed">-</Text>;
+
+  // Generate initials from vendor name
+  const getInitials = (name) => {
+    if (!name) return "?";
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // If it's an admin, show admin badge
+  if (isAdmin) {
+    return (
+      <Group spacing="xs" noWrap>
+        <Avatar 
+          color="red" 
+          radius="xl" 
+          size="sm"
+        >
+          AD
+        </Avatar>
+        <div>
+          <Badge color="red">Admin</Badge>
+        </div>
+      </Group>
+    );
+  }
+
+  return (
+    <Tooltip label={showEmail ? `ID: ${vendorId || 'Unknown'}` : ''} disabled={!showEmail}>
+      <Group spacing="xs" noWrap>
+        <Avatar 
+          color="blue" 
+          radius="xl" 
+          size="sm"
+        >
+          {getInitials(vendor)}
+        </Avatar>
+        <div>
+          <Text size="sm" fw={500}>{vendor}</Text>
+          {showEmail && vendorId && <Text size="xs" color="dimmed">{vendorId}</Text>}
+        </div>
+      </Group>
+    </Tooltip>
+  );
+};
 
 const ProductsDataTable = ({ products }: { products: any }) => {
   const [opened, setOpened] = useState(false);
@@ -153,13 +205,23 @@ const ProductsDataTable = ({ products }: { products: any }) => {
     { field: "category", headerName: "Category", width: 130 },
     { field: "price", headerName: "Price", width: 100 },
     { field: "sizes", headerName: "Sizes", width: 50 },
-    { field: "vendor", headerName: "Vendor", width: 100 },
+    {
+      field: "vendor",
+      headerName: "Vendor",
+      width: 150,
+      renderCell: (params) => (
+        <VendorBadge 
+          vendor={params.value} 
+          vendorId={params.row.vendorId} 
+          isAdmin={params.row.isAdmin}
+        />
+      ),
+    },
     {
       field: "featured",
       headerName: "Featured",
       width: 100,
       renderCell: (params) => {
-        console.log(params);
         return (
           <div className="mt-[10px]">
             <Switch
@@ -277,6 +339,9 @@ const ProductsDataTable = ({ products }: { products: any }) => {
          firstImageUrl = '/placeholder.png'; // Use placeholder if no images
       }
 
+      // Determine if product was created by admin based on createdBy field
+      // This gives more accurate role detection
+      const isAdmin = product.createdBy === 'admin';
 
       const subProduct = product.subProducts[0] || {};
       const sizes = subProduct.sizes || [];
@@ -296,7 +361,10 @@ const ProductsDataTable = ({ products }: { products: any }) => {
         category: product.category?.name || "N/A", // Safer access to category name
         price: sizePrices,
         sizes: sizeLabels,
-        vendor: product?.vendor?.name || "-",
+        vendor: product?.vendor || "Unknown",
+        vendorId: product?.vendorId || null,
+        createdBy: product?.createdBy || null, // Pass createdBy field
+        isAdmin: isAdmin, // Set based on createdBy field
         featured: product?.featured || false, // Ensure boolean value
         view: "-",
         edit: "-",

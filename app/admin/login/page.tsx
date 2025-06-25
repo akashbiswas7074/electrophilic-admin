@@ -7,6 +7,7 @@ import { toast, Toaster } from 'react-hot-toast';
 import { RiAdminLine } from 'react-icons/ri';
 import { FiMail, FiLock } from 'react-icons/fi';
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
@@ -26,6 +27,8 @@ export default function AdminLogin() {
   const handleSubmit = async (values: typeof form.values) => {
     try {
       setLoading(true);
+      
+      // First try using the direct API endpoint for admin login
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,18 +38,36 @@ export default function AdminLogin() {
       const data = await response.json();
 
       if (data.success) {
+        // Also authenticate with NextAuth as a fallback
+        try {
+          await signIn("admin", {
+            email: values.email,
+            password: values.password,
+            redirect: false
+          });
+        } catch (authError) {
+          console.error("NextAuth signin error:", authError);
+          // Continue even if NextAuth fails as we already have the token from the API
+        }
+        
         toast.success('Login successful! Redirecting...');
-        router.push("/admin/dashboard");
-        router.refresh(); // Refresh to update authentication state
+        
+        // Give the toast time to appear before redirect
+        setTimeout(() => {
+          router.push("/admin/dashboard");
+          router.refresh(); // Refresh to update authentication state
+        }, 1000);
       } else {
         toast.error(data.message || 'Login failed');
       }
     } catch (err) {
+      console.error(err);
       toast.error('Something went wrong');
     } finally {
       setLoading(false);
     }
   };
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
       <Toaster position="top-center" />
@@ -57,7 +78,9 @@ export default function AdminLogin() {
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg">
             <RiAdminLine className="text-white" size={32} />
           </div>
-        </div>        {/* Login Form */}
+        </div>
+        
+        {/* Login Form */}
         <div className="bg-white backdrop-blur-md rounded-xl shadow-xl p-5 sm:p-8 pt-12 border border-gray-100 relative">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h1>

@@ -1,6 +1,8 @@
 "use client";
+import React from "react"; // Added React import for React.use()
 import { useEffect, useState } from "react";
-import { getOrderDetailsById } from "@/lib/database/actions/admin/orders/orders.actions"; // Updated import
+import { getOrderDetailsById } from "@/lib/database/actions/admin/orders/orders.actions";
+import { getSingleVendor } from "@/lib/database/actions/admin/vendor.actions"; // Added import for vendor actions
 import {
   Container,
   Title,
@@ -41,24 +43,57 @@ import {
 import { useParams, useRouter } from "next/navigation"; // Added useRouter
 import Link from "next/link"; // For linking to product pages
 
-const OrderViewPage = () => {
-  const params = useParams();
-  const router = useRouter(); // Initialize router
-  const idFromParams = params?.id;
+const OrderViewPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  const router = useRouter();
+  const { id: idFromParams } = React.use(params);
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vendorDetails, setVendorDetails] = useState<Record<string, any>>({});
+  const [loadingVendors, setLoadingVendors] = useState(false);
 
   useEffect(() => {
-    const orderId = Array.isArray(idFromParams) ? idFromParams[0] : idFromParams;
-    if (orderId) {
+    if (idFromParams) {
       const fetchOrder = async () => {
         setLoading(true);
         setError(null);
         try {
-          const result = await getOrderDetailsById(orderId as string);
+          const result = await getOrderDetailsById(idFromParams as string);
           if (result && result.success) {
             setOrder(result.order);
+            
+            // Extract unique vendor IDs from order items
+            const items = result.order.orderItems || result.order.products || [];
+            const vendorIds = new Set<string>();
+            
+            items.forEach((item: any) => {
+              const productInfo = item.product || item;
+              let vendorId = null;
+              
+              // Extract vendor ID considering all possible formats
+              if (productInfo.vendorId) {
+                if (typeof productInfo.vendorId === 'object' && productInfo.vendorId._id) {
+                  vendorId = productInfo.vendorId._id;
+                } else if (typeof productInfo.vendorId === 'string') {
+                  vendorId = productInfo.vendorId;
+                }
+              } else if (productInfo.vendor) {
+                if (typeof productInfo.vendor === 'object' && productInfo.vendor._id) {
+                  vendorId = productInfo.vendor._id;
+                } else if (typeof productInfo.vendor === 'string') {
+                  vendorId = productInfo.vendor;
+                }
+              }
+              
+              if (vendorId) {
+                vendorIds.add(vendorId);
+              }
+            });
+            
+            // Fetch vendor details for each unique vendor ID
+            if (vendorIds.size > 0) {
+              await fetchVendorDetails(Array.from(vendorIds));
+            }
           } else {
             setError(result?.message || "Failed to fetch order details.");
           }
@@ -73,6 +108,31 @@ const OrderViewPage = () => {
       fetchOrder();
     }
   }, [idFromParams]);
+
+  // Function to fetch vendor details
+  const fetchVendorDetails = async (vendorIds: string[]) => {
+    setLoadingVendors(true);
+    const vendorDetailsMap: Record<string, any> = {};
+    
+    try {
+      for (const vendorId of vendorIds) {
+        try {
+          const vendorResponse = await getSingleVendor(vendorId);
+          if (vendorResponse && vendorResponse.success && vendorResponse.vendor) {
+            vendorDetailsMap[vendorId] = vendorResponse.vendor;
+          }
+        } catch (vendorError) {
+          console.error(`Failed to fetch details for vendor ${vendorId}:`, vendorError);
+          // Still continue with other vendors even if one fails
+        }
+      }
+      setVendorDetails(vendorDetailsMap);
+    } catch (error) {
+      console.error("Failed to fetch vendor details:", error);
+    } finally {
+      setLoadingVendors(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -213,8 +273,115 @@ const OrderViewPage = () => {
             </Card>
           )}
         </SimpleGrid>
+        
+        {/* Extract vendor information */}
+        {itemsToDisplay.length > 0 && (
+          <>
+            <Divider my="xl" />
+            
+            {/* Vendor Information Section */}
+            <Title order={2} className="mb-4 flex items-center">
+              <IconBuildingStore size={28} className="mr-2" /> Vendor Information
+            </Title>
+            
+            {loadingVendors ? (
+              <Group justify="center" py="lg">
+                <Loader size="md" />
+                <Text>Loading vendor information...</Text>
+              </Group>
+            ) : (
+              <SimpleGrid cols={{ base: 1, md: Object.keys(vendorDetails).length > 1 ? 2 : 1 }} spacing="xl">
+                {Object.entries(vendorDetails).map(([vendorId, vendorInfo]) => {
+                  // Extract vendor properties with fallbacks
+                  const vendorName = vendorInfo.businessName || vendorInfo.name || "N/A";
+                  const vendorEmail = vendorInfo.email || "N/A";
+                  const vendorPhone = vendorInfo.phoneNumber || "N/A";
+                  const vendorDescription = vendorInfo.description || "N/A";
+                  const vendorZipCode = vendorInfo.zipCode || "N/A";
+                  const vendorAddress = vendorInfo.address || "N/A";
+                  const vendorCity = vendorInfo.city || "N/A";
+                  const vendorState = vendorInfo.state || "N/A";
+                  const vendorCountry = vendorInfo.country || "N/A";
+                  const vendorRole = vendorInfo.role || "vendor";
+                  const vendorVerified = vendorInfo.verified ? "Verified" : "Not Verified";
+                  const vendorCreatedAt = vendorInfo.createdAt 
+                    ? new Date(vendorInfo.createdAt).toLocaleDateString() 
+                    : "N/A";
+                  
+                  return (
+                    <Card key={`vendor-${vendorId}`} shadow="sm" padding="lg" radius="md" withBorder>
+                      <Title order={3} className="mb-4 flex items-center">
+                        <IconBuildingStore size={24} className="mr-2" /> 
+                        {vendorName !== "N/A" ? vendorName : `Vendor ID: ${vendorId}`}
+                        {vendorVerified === "Verified" && (
+                          <Badge ml="xs" color="green" variant="light">Verified</Badge>
+                        )}
+                      </Title>
+                      
+                      {vendorEmail !== "N/A" && (
+                        <Text className="mb-2 flex items-center">
+                          <IconMail size={16} className="mr-2" /> <strong>Email:</strong> {vendorEmail}
+                        </Text>
+                      )}
+                      
+                      {vendorPhone !== "N/A" && (
+                        <Text className="mb-2 flex items-center">
+                          <IconPhone size={16} className="mr-2" /> <strong>Phone:</strong> {vendorPhone}
+                        </Text>
+                      )}
+                      
+                      {vendorRole !== "N/A" && (
+                        <Text className="mb-2 flex items-center">
+                          <IconUserCircle size={16} className="mr-2" /> <strong>Role:</strong> {vendorRole}
+                        </Text>
+                      )}
+                      
+                      {/* Show full address with all available details */}
+                      {(vendorAddress !== "N/A" || vendorCity !== "N/A" || vendorState !== "N/A") && (
+                        <Text className="mb-2 flex items-start">
+                          <IconMapPin size={16} className="mr-2 mt-1" /> <strong>Address:</strong> {' '}
+                          <span>
+                            {vendorAddress !== "N/A" && vendorAddress}
+                            {vendorCity !== "N/A" && (vendorAddress !== "N/A" ? `, ${vendorCity}` : vendorCity)}
+                            {vendorState !== "N/A" && (
+                              (vendorAddress !== "N/A" || vendorCity !== "N/A") ? `, ${vendorState}` : vendorState
+                            )}
+                            {vendorZipCode !== "N/A" && ` - ${vendorZipCode}`}
+                            {vendorCountry !== "N/A" && `, ${vendorCountry}`}
+                          </span>
+                        </Text>
+                      )}
+                      
+                      {vendorDescription !== "N/A" && (
+                        <Text className="mb-2 flex items-start">
+                          <IconFileDescription size={16} className="mr-2 mt-1" /> <strong>Description:</strong> {vendorDescription}
+                        </Text>
+                      )}
+                      
+                      {vendorCreatedAt !== "N/A" && (
+                        <Text className="mb-2 flex items-center">
+                          <IconCalendarEvent size={16} className="mr-2" /> <strong>Since:</strong> {vendorCreatedAt}
+                        </Text>
+                      )}
+                      
+                      <Button 
+                        size="xs" 
+                        variant="outline" 
+                        component={Link}
+                        href={`/admin/dashboard/vendors/view/${vendorId}`}
+                        className="mt-2"
+                      >
+                        View Full Profile
+                      </Button>
+                    </Card>
+                  );
+                })}
+              </SimpleGrid>
+            )}
+          </>
+        )}
 
-        <Divider my="xl" />
+        <Divider my="lg" />
 
         {/* Order Items Section */}
         <Title order={2} className="mb-4 flex items-center">
@@ -226,6 +393,7 @@ const OrderViewPage = () => {
               <Table.Tr>
                 <Table.Th>Image</Table.Th>
                 <Table.Th>Product Name</Table.Th>
+                <Table.Th>Vendor</Table.Th>
                 <Table.Th>SKU</Table.Th>
                 <Table.Th>Size</Table.Th>
                 <Table.Th>Quantity</Table.Th>
@@ -240,6 +408,57 @@ const OrderViewPage = () => {
               {itemsToDisplay.map((item: any, index: number) => {
                 const productInfo = item.product || item; // Handle both populated and direct product info
                 const itemTotal = (item.qty || 1) * (item.price || 0);
+                
+                // Improved vendor info extraction
+                let vendorId = null;
+                let vendorName = "N/A";
+                let vendorEmail = "N/A";
+                let vendorPhone = "N/A";
+                let vendorAddress = "N/A";
+                let vendorDescription = "N/A";
+                
+                // First try to get vendor from our fetched details
+                if (productInfo.vendorId) {
+                  if (typeof productInfo.vendorId === 'object' && productInfo.vendorId._id) {
+                    vendorId = productInfo.vendorId._id;
+                  } else if (typeof productInfo.vendorId === 'string') {
+                    vendorId = productInfo.vendorId;
+                  }
+                } else if (productInfo.vendor) {
+                  if (typeof productInfo.vendor === 'object' && productInfo.vendor._id) {
+                    vendorId = productInfo.vendor._id;
+                  } else if (typeof productInfo.vendor === 'string') {
+                    vendorId = productInfo.vendor;
+                  }
+                }
+                
+                // Get vendor data from our cached details
+                if (vendorId && vendorDetails[vendorId]) {
+                  const vendorInfo = vendorDetails[vendorId];
+                  vendorName = vendorInfo.businessName || vendorInfo.name || "N/A";
+                  vendorEmail = vendorInfo.email || "N/A";
+                  vendorPhone = vendorInfo.phoneNumber || "N/A";
+                  vendorAddress = vendorInfo.address || "N/A";
+                  vendorDescription = vendorInfo.description || "N/A";
+                }
+                // Fallback to embedded data
+                else if (productInfo.vendorId && typeof productInfo.vendorId === 'object') {
+                  const vendorInfo = productInfo.vendorId;
+                  vendorName = vendorInfo.businessName || vendorInfo.name || "N/A";
+                  vendorEmail = vendorInfo.email || "N/A";
+                  vendorPhone = vendorInfo.phoneNumber || "N/A";
+                  vendorAddress = vendorInfo.address || "N/A";
+                  vendorDescription = vendorInfo.description || "N/A";
+                }
+                else if (productInfo.vendor && typeof productInfo.vendor === 'object') {
+                  const vendorInfo = productInfo.vendor;
+                  vendorName = vendorInfo.businessName || vendorInfo.name || "N/A";
+                  vendorEmail = vendorInfo.email || "N/A";
+                  vendorPhone = vendorInfo.phoneNumber || "N/A";
+                  vendorAddress = vendorInfo.address || "N/A";
+                  vendorDescription = vendorInfo.description || "N/A";
+                }
+                
                 return (
                   <Table.Tr key={item._id || index}>
                     <Table.Td>
@@ -253,6 +472,31 @@ const OrderViewPage = () => {
                       />
                     </Table.Td>
                     <Table.Td>{productInfo.name || "N/A"}</Table.Td>
+                    <Table.Td>
+                      <div className="flex flex-col">
+                        <Text fw={500}>{vendorName}</Text>
+                        {vendorEmail !== "N/A" && (
+                          <Text size="xs" c="dimmed" className="flex items-center">
+                            <IconMail size={12} className="mr-1" /> {vendorEmail}
+                          </Text>
+                        )}
+                        {vendorPhone !== "N/A" && (
+                          <Text size="xs" c="dimmed" className="flex items-center">
+                            <IconPhone size={12} className="mr-1" /> {vendorPhone}
+                          </Text>
+                        )}
+                        {vendorAddress !== "N/A" && (
+                          <Text size="xs" c="dimmed" className="flex items-center">
+                            <IconMapPin size={12} className="mr-1" /> {vendorAddress}
+                          </Text>
+                        )}
+                        {vendorDescription !== "N/A" && (
+                          <Text size="xs" c="dimmed" className="flex items-center truncate max-w-[150px]" title={vendorDescription}>
+                            <IconFileDescription size={12} className="mr-1" /> {vendorDescription}
+                          </Text>
+                        )}
+                      </div>
+                    </Table.Td>
                     <Table.Td>{productInfo.sku || item.sku || "N/A"}</Table.Td>
                     <Table.Td>{item.size || "N/A"}</Table.Td>
                     <Table.Td>{item.qty || 1}</Table.Td>

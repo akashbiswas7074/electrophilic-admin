@@ -16,8 +16,10 @@ import {
   List,
   ThemeIcon,
   Accordion,
+  Avatar,
+  Box,
 } from "@mantine/core";
-import { IconCircleCheck, IconX, IconPhoto, IconTag, IconCategory, IconBrandProducthunt, IconListDetails, IconSparkles, IconAtom2, IconMessageCircle, IconStar, IconShoppingCart, IconTruckDelivery, IconDimensions } from "@tabler/icons-react";
+import { IconCircleCheck, IconX, IconPhoto, IconTag, IconCategory, IconBrandProducthunt, IconListDetails, IconSparkles, IconAtom2, IconMessageCircle, IconStar, IconShoppingCart, IconTruckDelivery, IconDimensions, IconUser } from "@tabler/icons-react";
 import { useParams } from "next/navigation";
 
 const ProductViewPage = () => {
@@ -118,6 +120,34 @@ const ProductViewPage = () => {
           <div>
             <Title order={1} className="mb-2">{product.name}</Title>
             <Text c="dimmed" className="mb-2">Slug: {product.slug}</Text>
+            
+            {/* Vendor Information Display */}
+            {(product.vendor || product.createdBy) && (
+              <Box mt={8} mb={10}>
+                <Group gap="xs">
+                  <Avatar 
+                    color={product.createdBy === 'admin' ? "red" : "blue"} 
+                    radius="xl" 
+                    size="md"
+                  >
+                    {product.createdBy === 'admin' ? 'AD' : (product.vendor ? product.vendor.substring(0, 2).toUpperCase() : 'VE')}
+                  </Avatar>
+                  <div>
+                    <Text size="sm" fw={500} className="flex items-center">
+                      Created by: 
+                      {product.createdBy === 'admin' ? (
+                        <Badge color="red" ml={5}>Admin</Badge>
+                      ) : (
+                        <Badge color="blue" ml={5}>{product.vendor || 'Vendor'}</Badge>
+                      )}
+                    </Text>
+                    {product.vendorId && product.createdBy !== 'admin' && (
+                      <Text size="xs" c="dimmed">ID: {product.vendorId}</Text>
+                    )}
+                  </div>
+                </Group>
+              </Box>
+            )}
           </div>
           <Badge color={product.featured ? "green" : "gray"} variant="light" size="lg">
             {product.featured ? "Featured" : "Not Featured"}
@@ -156,6 +186,20 @@ const ProductViewPage = () => {
                         ))}
                       </List>
                     </>
+                  )}
+                </Accordion.Panel>
+              </Accordion.Item>
+
+              <Accordion.Item value="vendorInfo">
+                <Accordion.Control icon={<IconUser size={20} />}>Vendor Information</Accordion.Control>
+                <Accordion.Panel>
+                  {product.vendor ? (
+                    <>
+                      <Text className="mb-1"><strong>Vendor Name:</strong> {product.vendor}</Text>
+                      {product.vendorId && <Text className="mb-1"><strong>Vendor ID:</strong> {product.vendorId}</Text>}
+                    </>
+                  ) : (
+                    <Text c="dimmed">No vendor information available.</Text>
                   )}
                 </Accordion.Panel>
               </Accordion.Item>

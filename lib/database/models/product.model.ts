@@ -79,6 +79,11 @@ const productSchema = new mongoose.Schema(
     vendor: {
       type: Object,
     },
+    vendorId: {
+      type: ObjectId,
+      ref: "Vendor",
+      required: false,
+    },
     subProducts: [
       {
         sku: String,

@@ -6,6 +6,24 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/router";
 import { usePathname } from "next/navigation";
+import { lazy, Suspense } from "react";
+
+// Lazy load heavy components
+const MobileBottomNavigation = lazy(() => import("@/components/ui/mobile-bottom-navigation").then(mod => ({ default: mod.MobileBottomNavigation })));
+
+// Loading skeleton for mobile bottom navigation
+const MobileBottomNavSkeleton = () => (
+  <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 animate-pulse">
+    <div className="flex items-center justify-around h-16">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="flex flex-col items-center justify-center flex-1 py-2">
+          <div className="h-5 w-5 bg-gray-200 rounded mb-1"></div>
+          <div className="h-3 w-12 bg-gray-200 rounded"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 const Navbar = () => {
   const [opened, { toggle, close }] = useDisclosure(false);
@@ -22,39 +40,46 @@ const Navbar = () => {
   );
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm">
-      <nav className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
-          <Logo />
-          
-          {/* Desktop Navigation */}
-          <div className="hidden sm:flex gap-4">
-            <NavLinks />
+    <>
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm">
+        <nav className="container mx-auto px-4">
+          <div className="flex justify-between items-center h-16">
+            <Logo />
+            
+            {/* Desktop Navigation */}
+            <div className="hidden sm:flex gap-4">
+              <NavLinks />
+            </div>
+
+            {/* Mobile Navigation */}
+            <Burger
+              opened={opened}
+              onClick={toggle}
+              className="sm:hidden"
+              size="sm"
+            />
           </div>
 
-          {/* Mobile Navigation */}
-          <Burger
+          {/* Mobile Menu Drawer */}
+          <Drawer
             opened={opened}
-            onClick={toggle}
+            onClose={close}
+            size="100%"
+            position="right"
             className="sm:hidden"
-            size="sm"
-          />
-        </div>
+          >
+            <div className="flex flex-col gap-4 p-4 mt-16">
+              <NavLinks />
+            </div>
+          </Drawer>
+        </nav>
+      </header>
 
-        {/* Mobile Menu Drawer */}
-        <Drawer
-          opened={opened}
-          onClose={close}
-          size="100%"
-          position="right"
-          className="sm:hidden"
-        >
-          <div className="flex flex-col gap-4 p-4 mt-16">
-            <NavLinks />
-          </div>
-        </Drawer>
-      </nav>
-    </header>
+      {/* Lazy loaded mobile bottom navigation */}
+      <Suspense fallback={<MobileBottomNavSkeleton />}>
+        <MobileBottomNavigation />
+      </Suspense>
+    </>
   );
 };
 
@@ -93,7 +118,7 @@ export function NavItem({ href, label, icon, active, isMobile = false, onClick }
       )}
     >
       {icon && <span className={cn("mr-3", isActive ? "text-blue-600" : "text-gray-500")}>{icon}</span>}
-      <span className={isActive ? "font-semibold" : ""}>{label}</span>
+      {label}
     </Link>
   );
 }

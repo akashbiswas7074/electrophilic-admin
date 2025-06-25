@@ -10,52 +10,81 @@ const { ObjectId } = mongoose.Types;
 export const getVendorCookiesandFetchVendor = async () => {
   const cookieStore = await cookies();
   const vendor_token = cookieStore.get("vendor_token");
-  if (!vendor_token) {
+
+  // Check if vendor_token exists and has a value
+  if (!vendor_token || !vendor_token.value) {
     return {
       message: "Vendor token is invalid!",
       vendor: [],
       success: false,
     };
   }
-  const decode = jwt.verify(vendor_token?.value, process.env.JWT_SECRET);
-  await connectToDatabase();
-  const vendor = await Vendor.findById(decode.id);
-  if (!vendor) {
+
+  try {
+    const decode = jwt.verify(vendor_token.value, process.env.JWT_SECRET);
+    await connectToDatabase();
+    const vendor = await Vendor.findById(decode.id);
+    if (!vendor) {
+      cookieStore.delete("vendor_token");
+      return {
+        message: "Vendor doesn't exist.",
+        vendor: [],
+        success: false,
+      };
+    }
+    return {
+      message: "Successfully found vendor on database.",
+      vendor: JSON.parse(JSON.stringify(vendor)),
+      success: true,
+    };
+  } catch (error: any) {
+    console.error("Error verifying vendor token:", error);
+    // Delete invalid token
     cookieStore.delete("vendor_token");
     return {
-      message: "Vendor does'nt exits.",
+      message: "Invalid or expired vendor token.",
       vendor: [],
       success: false,
     };
   }
-  return {
-    message: "Successfully found vendor on database.",
-    vendor: JSON.parse(JSON.stringify(vendor)),
-    success: true,
-  };
 };
 
 // get single vendor
 export const getSingleVendor = async (vendorId: string) => {
   try {
     await connectToDatabase();
+
+    // Validate the vendorId format before attempting conversion
+    if (!mongoose.Types.ObjectId.isValid(vendorId)) {
+      return {
+        message: "Invalid vendor ID format.",
+        success: false,
+        vendor: null,
+      };
+    }
+
     const vendorObjectId = new ObjectId(vendorId);
 
     const vendor = await Vendor.findById(vendorObjectId);
     if (!vendor) {
       return {
-        message: "Vendor does'nt exists.",
+        message: "Vendor doesn't exist.",
         success: false,
-        vendor: [],
+        vendor: null,
       };
     }
     return {
       success: true,
       message: "Successfully vendor found",
-      vendor,
+      vendor: JSON.parse(JSON.stringify(vendor)),
     };
   } catch (error: any) {
-    console.log(error);
+    console.log("Error fetching vendor:", error);
+    return {
+      success: false,
+      message: error.message || "Failed to fetch vendor",
+      vendor: null,
+    };
   }
 };
 
@@ -140,9 +169,13 @@ export async function ChangeVerifyTagForVendor(
     }
     return {
       message: "Successfully updated vendor",
-      success: false,
+      success: true,
     };
   } catch (error: any) {
     console.log(error);
+    return {
+      success: false,
+      message: error.message || "Failed to update vendor verification status",
+    };
   }
 }

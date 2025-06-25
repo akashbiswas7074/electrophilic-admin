@@ -141,30 +141,37 @@ export async function updateHeroSectionOrder(orderedIds: string[]) {
  */
 export async function createHeroSection(formData: any) {
   try {
-    console.log("Connecting to database...");
     await connectToDatabase();
     
-    // Ensure all fields are properly included
-    const heroSectionData = {
-      title: formData.title,
-      subtitle: formData.subtitle,
-      isActive: Boolean(formData.isActive),
-      order: Number(formData.order),
-      // Explicitly include layout & design fields with proper defaults
-      pattern: formData.pattern || 'standard',
-      layoutId: formData.layoutId || '',
-      contentAlignment: formData.contentAlignment || 'center',
-      backgroundImage: formData.backgroundImage || '',
-      mediaUrl: formData.mediaUrl || '',
-      mediaType: formData.mediaType || 'image',
-      // Buttons
-      buttons: Array.isArray(formData.buttons) ? formData.buttons : []
-    };
+    console.log("Creating hero section with data:", JSON.stringify(formData, null, 2));
     
-    console.log("Creating hero section with data:", JSON.stringify(heroSectionData, null, 2));
+    // Validate required fields
+    if (!formData.title?.trim()) {
+      return {
+        success: false,
+        message: "Title is required",
+      };
+    }
     
     // Create the hero section
-    const heroSection = await HeroSection.create(heroSectionData);
+    const heroSection = await HeroSection.create({
+      title: formData.title.trim(),
+      subtitle: formData.subtitle?.trim() || "",
+      longDescription: formData.longDescription?.trim() || "",
+      isActive: formData.isActive !== undefined ? formData.isActive : true,
+      order: formData.order || 10,
+      pattern: formData.pattern || 'standard',
+      layoutId: formData.layoutId?.trim() || "",
+      contentAlignment: formData.contentAlignment || 'center',
+      backgroundImage: formData.backgroundImage?.trim() || "",
+      mediaUrl: formData.mediaUrl?.trim() || "",
+      mediaType: formData.mediaType || 'image',
+      titleColor: formData.titleColor?.trim() || "",
+      descriptionColor: formData.descriptionColor?.trim() || "",
+      buttonTextColor: formData.buttonTextColor?.trim() || "",
+      buttonBackgroundColor: formData.buttonBackgroundColor?.trim() || "",
+      buttons: Array.isArray(formData.buttons) ? formData.buttons : [],
+    });
     
     console.log("Hero section created successfully with ID:", heroSection._id);
     console.log("Created document:", JSON.stringify(heroSection.toObject(), null, 2));
@@ -174,6 +181,22 @@ export async function createHeroSection(formData: any) {
     console.log("Saved section from DB:", JSON.stringify(savedSection?.toObject(), null, 2));
     if (!savedSection?.pattern) {
       console.warn("WARNING: Pattern field was not saved properly!");
+    }
+
+    // Sync hero sections to website sections after creation
+    try {
+      const syncResult = await fetch(`${process.env.NEXT_PUBLIC_WEB_URL || 'http://localhost:3000'}/api/sync-hero-sections`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!syncResult.ok) {
+        console.warn("Failed to sync hero sections to website sections after creation");
+      }
+    } catch (syncError) {
+      console.warn("Error syncing hero sections after creation:", syncError);
     }
     
     revalidatePath("/admin/dashboard/hero-sections");
@@ -190,12 +213,11 @@ export async function createHeroSection(formData: any) {
     if (error.errors) {
       const validationErrors = Object.keys(error.errors).map(field => {
         return `${field}: ${error.errors[field].message}`;
-      });
-      console.error("Validation errors:", validationErrors);
+      }).join(", ");
       
       return {
         success: false,
-        message: `Validation errors: ${validationErrors.join(", ")}`,
+        message: `Validation failed: ${validationErrors}`,
       };
     }
     

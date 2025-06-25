@@ -704,12 +704,24 @@ export const getOrderDetailsById = async (orderId: string) => {
       .populate({
         path: "orderItems.product", // If your order items reference products directly
         model: Product,
-        select: "name images slug", // Select fields you need from Product
+        select: "name images slug price vendor vendorId", // Added vendor and vendorId fields
       })
       .populate({
         path: "products.product", // If you have a products array with product refs
         model: Product,
-        select: "name images slug",
+        select: "name images slug price vendor vendorId", // Added vendor and vendorId fields
+      })
+      .populate({
+        // Add populate for vendorId to get vendor details
+        path: "products.product.vendorId",
+        model: mongoose.model('Vendor'),
+        select: "name email address phoneNumber businessName zipCode description"
+      })
+      .populate({
+        // Add populate for vendorId in orderItems as well
+        path: "orderItems.product.vendorId",
+        model: mongoose.model('Vendor'),
+        select: "name email address phoneNumber businessName zipCode description"
       });
 
     if (!order) {

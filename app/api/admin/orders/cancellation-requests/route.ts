@@ -7,6 +7,7 @@ import Product from "@/lib/database/models/product.model";
 import { cookies } from "next/headers";
 import { updateProductOrderStatus } from "@/lib/database/actions/admin/orders/orders.actions";
 import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 /**
  * API endpoint to get cancellation requests
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     let isAuthenticated = false;
     
     // Method 1: Check for adminId cookie
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const adminId = cookieStore.get('adminId')?.value;
     
     if (adminId) {
@@ -82,6 +83,15 @@ export async function GET(req: NextRequest) {
     // Find orders with cancellation requests
     const orders = await Order.find(query)
       .populate("user", "name email")
+      .populate({
+        path: "products.product",
+        select: "name vendor vendorId",
+        populate: {
+          path: "vendorId", 
+          model: "Vendor",
+          select: "name email"
+        }
+      })
       .sort({ "products.cancelRequestedAt": -1 }) // Sort by newest first
       .limit(limitParam ? parseInt(limitParam) : 50); // Default limit to 50
 
@@ -142,6 +152,136 @@ export async function GET(req: NextRequest) {
  * - status: New status (e.g., "Cancelled", "Cancellation Rejected")
  * - message: Optional message for the notification email
  */
+export async function POST(req: NextRequest) {
+  try {
+    // Connect to the database first
+    await connectToDatabase();
+    
+    // Check authentication using NextAuth session
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ 
+        success: false, 
+        message: "Authentication required" 
+      }, { status: 401 });
+    }
+    
+    // Parse request body
+    const body = await req.json();
+    const { orderId, productId, status, message } = body;
+    
+    console.log('POST request received with body:', JSON.stringify(body));
+    
+    // Validate required parameters
+    if (!orderId || !productId || !status) {
+      return NextResponse.json({
+        success: false, 
+        message: "Missing required parameters: orderId, productId, and status are required"
+      }, { status: 400 });
+    }
+    
+    // If the cancellation is approved, we need to clear the cancellation fields
+    // This means the cancellation request fields should be removed from the database
+    if (status === "Cancelled") {
+      // First, find the order and update the specific product to clear cancellation fields
+      const order = await Order.findById(orderId);
+      
+      if (!order) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "Order not found" 
+        }, { status: 404 });
+      }
+      
+      // Find the specific product in the order
+      const productIndex = order.products.findIndex(
+        (p: any) => p._id.toString() === productId
+      );
+      
+      if (productIndex === -1) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "Product not found in order" 
+        }, { status: 404 });
+      }
+      
+      // Clear cancellation request fields
+      order.products[productIndex].cancelRequested = false;
+      order.products[productIndex].cancelReason = "none";
+      order.products[productIndex].cancelRequestedAt = undefined;
+      
+      // Also update the corresponding item in orderItems array if it exists
+      if (order.orderItems && Array.isArray(order.orderItems)) {
+        const orderItemIndex = order.orderItems.findIndex(
+          (item: any) => item._id.toString() === productId
+        );
+        
+        if (orderItemIndex !== -1) {
+          order.orderItems[orderItemIndex].cancelRequested = false;
+          order.orderItems[orderItemIndex].cancelReason = "none";
+          order.orderItems[orderItemIndex].cancelRequestedAt = undefined;
+          
+          // Mark the orderItems array as modified
+          order.markModified('orderItems');
+        }
+      }
+      
+      // Mark the products array as modified
+      order.markModified('products');
+      
+      // Save the order
+      await order.save();
+      
+      console.log(`Cancellation approved: Cleared cancellation fields for order ${orderId}, product ${productId}. Set cancelRequested=false, cancelReason="none"`);
+    }
+    
+    // Update product status in the order
+    const result = await updateProductOrderStatus(
+      orderId,
+      productId,
+      status,
+      undefined, // trackingUrl (not needed for cancellations)
+      undefined, // trackingId (not needed for cancellations)
+      message || `Your cancellation request has been ${status.toLowerCase()}` // Pass message as customMessage
+    );
+    
+    // Provide a more descriptive response message based on the action taken
+    let responseMessage = `Order item ${status.toLowerCase()} successfully`;
+    if (status === "Cancelled") {
+      responseMessage = "Cancellation request approved. The cancelRequested flag is set to false and cancelReason is set to 'none'";
+    } else if (status === "Cancellation Rejected") {
+      responseMessage = "Cancellation request rejected";
+    }
+    
+    if (result && result.success) {
+      return NextResponse.json({
+        success: true,
+        message: responseMessage,
+        order: result.order
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        message: result?.message || 'Failed to update cancellation status'
+      }, { status: 400 });
+    }
+  } catch (error: any) {
+    console.error("Error processing cancellation request:", error);
+    return NextResponse.json({
+      success: false,
+      message: error.message || "Failed to process cancellation request"
+    }, { status: 500 });
+  }
+}
+
+/**
+ * API endpoint to update cancellation request status
+ * Required body:
+ * - orderId: Order ID
+ * - productId: Product ID within the order
+ * - status: New status (e.g., "Cancelled", "Cancellation Rejected")
+ * - message: Optional message for the notification email
+ */
 export async function PATCH(req: NextRequest) {
   try {
     // Connect to the database first
@@ -151,7 +291,7 @@ export async function PATCH(req: NextRequest) {
     let isAuthenticated = false;
     
     // Method 1: Check for adminId cookie
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const adminId = cookieStore.get('adminId')?.value;
     
     if (adminId) {

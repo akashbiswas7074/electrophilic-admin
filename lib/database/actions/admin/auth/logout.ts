@@ -1,5 +1,7 @@
 "use server";
+
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export const logout = async () => {
   try {
@@ -12,3 +14,12 @@ export const logout = async () => {
     console.log(error);
   }
 };
+
+export async function logoutAdmin() {
+  // Clear the adminId cookie
+  cookies().delete("adminId");
+  cookies().delete("adminToken");
+
+  // Redirect to login page
+  redirect("/admin/login");
+}
