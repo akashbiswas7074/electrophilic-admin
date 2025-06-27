@@ -227,7 +227,6 @@ export const deleteProduct = async (productId: string) => {
 export const updateProduct = async (
   productId: string,
   sku: string,
-  images: [],
   sizes: Array<{ size: string; qty: string; price: string }>,
   discount: number,
   name: string,
@@ -236,12 +235,14 @@ export const updateProduct = async (
   brand: string,
   details: Array<{ name: string; value: string }>,
   questions: Array<{ question: string; answer: string }>,
-  category: string,
-  subCategories: string[],
   benefits: Array<{ name: string }>,
   ingredients: Array<{ name: string }>,
+  images?: any[], // Made optional and moved here
+  category?: string,
+  subCategories?: string[],
   featured?: boolean,
   shippingFee?: number,
+  shortDescription?: string, // Added for compatibility
   price?: number, // Optional direct price for products without sizes
   qty?: number,   // Optional direct quantity for products without sizes
   stock?: number  // Optional direct stock for products without sizes
@@ -280,6 +281,16 @@ export const updateProduct = async (
     product.benefits = benefits;
     product.ingredients = ingredients;
     product.longDescription = longDescription;
+    
+    // Ensure subProducts array exists
+    if (!product.subProducts || product.subProducts.length === 0) {
+      product.subProducts = [{ 
+        sku: sku || '',
+        images: images || [],
+        sizes: sizes || [],
+        discount: discount || 0
+      }];
+    }
     
     // Update product subProduct information
     product.subProducts[0].sku = sku;
@@ -336,15 +347,22 @@ export const updateProduct = async (
       product.shippingFee = shippingFee;
     }
 
+    // Mark the document as modified to ensure save works
+    product.markModified('subProducts');
+    product.markModified('details');
+    product.markModified('questions');
+    product.markModified('benefits');
+    product.markModified('ingredients');
+
     await product.save();
     return {
       message: "Product updated successfully.",
       success: true,
     };
   } catch (error: any) {
-    console.log(error);
+    console.error("Error updating product:", error);
     return {
-      message: error,
+      message: error.message || "An error occurred while updating the product",
       success: false,
     };
   }

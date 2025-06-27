@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { calculateShippingCharge } from "../utils/shipping";
 const { ObjectId } = mongoose.Schema;
 
 // Define item schema for better maintainability

@@ -13,7 +13,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { MdOutlineCategory, MdSpaceDashboard } from "react-icons/md";
 import { IoListCircleSharp } from "react-icons/io5";
-import { FaTable, FaStar, FaFilm, FaLayerGroup } from "react-icons/fa";
+import { FaTable, FaStar, FaFilm, FaLayerGroup, FaQuestionCircle } from "react-icons/fa";
 import { BsPatchPlus } from "react-icons/bs";
 import { RiCoupon3Fill, RiSendPlaneFill } from "react-icons/ri"; 
 import { VscGraph } from "react-icons/vsc";
@@ -195,9 +195,34 @@ const navigationItems: NavSection[] = [
         label: "Website Logos"
       },
       {
+        href: "/admin/dashboard/website-settings",
+        icon: <FaRegRectangleList size={20} />,
+        label: "Website Settings"
+      },
+      {
         href: "/admin/dashboard/site-footer",
         icon: <FaRegRectangleList size={20} />,
         label: "Site Footer"
+      },
+      {
+        href: "/admin/dashboard/return-policy",
+        icon: <FaRegRectangleList size={20} />,
+        label: "Return Policy"
+      },
+      {
+        href: "/admin/dashboard/shipping-returns",
+        icon: <FaRegRectangleList size={20} />,
+        label: "Shipping & Returns"
+      },
+      {
+        href: "/admin/dashboard/size-guide",
+        icon: <FaRegRectangleList size={20} />,
+        label: "Size Guide"
+      },
+      {
+        href: "/admin/dashboard/faq",
+        icon: <FaQuestionCircle size={20} />,
+        label: "FAQ Management"
       },
       {
         href: "/admin/dashboard/featuredyoutube",

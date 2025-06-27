@@ -7,6 +7,7 @@ import User from "@/lib/database/models/user.model";
 import { sendOrderStatusUpdateEmail, sendOrderConfirmationEmail } from "@/lib/email"; // Removed non-existent email functions
 import { mapWebsiteStatusToAdmin, mapAdminStatusToWebsite } from "@/lib/order-status-utils"; // Added mapAdminStatusToWebsite
 import mongoose from "mongoose";
+import { calculateShippingCharge } from "@/lib/utils/shipping"; // Importing shipping calculation
 
 type DateRange =
   | "today"

@@ -71,6 +71,7 @@ const EditProductPage = () => {
   
   const [images, setImages] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<any[]>([]);
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]); // Track images to delete
   const [parents, setParents] = useState<{ _id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<{ _id: string; name: string }[]>([]);
   const [subs, setSubs] = useState<any>([]);
@@ -418,18 +419,18 @@ const EditProductPage = () => {
           formValues.discount,
           formValues.name,
           formValues.description,
+          formValues.longDescription,
           formValues.brand,
           formValues.details,
           formValues.questions,
           formValues.benefits,
           formValues.ingredients,
-          formValues.longDescription,
-          uploaded_images, // Pass the images array to the update function
+          uploaded_images, // images parameter
           formValues.category,
           formValues.subCategories,
           featuredCheck,
           formValues.shippingFee,
-          formValues.description // Pass description as shortDescription parameter
+          formValues.description // shortDescription parameter
         );
 
         if (result && result.success) {
@@ -539,6 +540,39 @@ const EditProductPage = () => {
       longDescription: content
     }));
     setDescription(content);
+  };
+
+  // Handle deleting existing images
+  const handleDeleteExistingImage = (indexToDelete: number) => {
+    const updatedImages = existingImages.filter((_, index) => index !== indexToDelete);
+    setExistingImages(updatedImages);
+    
+    // Clear validation error if at least one image remains
+    if (updatedImages.length > 0 || formValues.imageFiles.length > 0) {
+      if (formErrors.imageFiles) {
+        setFormErrors((prev: any) => ({
+          ...prev,
+          imageFiles: undefined
+        }));
+      }
+    }
+  };
+
+  // Handle deleting new image previews
+  const handleDeleteNewImage = (indexToDelete: number) => {
+    const updatedPreviews = images.filter((_, index) => index !== indexToDelete);
+    const updatedFiles = formValues.imageFiles.filter((_: any, index: number) => index !== indexToDelete);
+    
+    setImages(updatedPreviews);
+    setFormValues((prev: any) => ({
+      ...prev,
+      imageFiles: updatedFiles
+    }));
+    
+    // Clean up object URLs to prevent memory leaks
+    if (images[indexToDelete]) {
+      URL.revokeObjectURL(images[indexToDelete]);
+    }
   };
 
   if (loading) {
@@ -1129,6 +1163,13 @@ const EditProductPage = () => {
                             style={{ objectFit: 'cover' }}
                             className="transition-all hover:scale-105"
                           />
+                          <button
+                            onClick={() => handleDeleteExistingImage(index)}
+                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                            title="Delete this image"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1182,6 +1223,13 @@ const EditProductPage = () => {
                                   style={{ objectFit: 'cover' }}
                                   className="transition-all hover:scale-105"
                                 />
+                                <button
+                                  onClick={() => handleDeleteNewImage(index)}
+                                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                                  title="Delete this image"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </button>
                               </div>
                             ))}
                           </div>

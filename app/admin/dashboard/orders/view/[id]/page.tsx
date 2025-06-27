@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getOrderById } from "@/lib/database/actions/admin/orders/orders.actions";
 import { mapWebsiteStatusToAdmin } from "@/lib/order-status-utils";
 import { getVendorDisplayInfo } from "@/lib/utils/vendor-utils";
+import { calculateShippingCharge, qualifiesForFreeShipping, getShippingDisplayText } from "@/lib/utils/shipping";
 import {
   Container,
   Title,
@@ -252,7 +253,36 @@ const AdminOrderViewPage = () => {
             <Title order={4} mb="sm" className="flex items-center"><IconCreditCard size={20} className="mr-2"/>Payment & Status</Title>
             <Text><strong>Total Amount:</strong> ₹{order.totalAmount.toFixed(2)}</Text>
             <Text><strong>Payment Method:</strong> {order.paymentMethod}</Text>
-            {order.paymentId && <Text><strong>Payment ID:</strong> {order.paymentId}</Text>}            <Text>
+            {order.paymentId && <Text><strong>Payment ID:</strong> {order.paymentId}</Text>}
+            
+            {/* Shipping Information Section */}
+            <Divider my="sm" />
+            <Title order={5} mb="xs" className="flex items-center"><IconTruckDelivery size={16} className="mr-2"/>Shipping Details</Title>
+            {(() => {
+              const itemsPrice = order.orderItems?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 
+                                order.products?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0;
+              const calculatedShipping = calculateShippingCharge(itemsPrice);
+              const qualifiesForFree = qualifiesForFreeShipping(itemsPrice);
+              
+              return (
+                <>
+                  <Text size="sm"><strong>Items Subtotal:</strong> ₹{itemsPrice.toFixed(2)}</Text>
+                  <Text size="sm"><strong>Shipping Charge:</strong> 
+                    <Badge ml="xs" color={qualifiesForFree ? "green" : "orange"} variant="light">
+                      {qualifiesForFree ? "FREE DELIVERY" : `₹${calculatedShipping}`}
+                    </Badge>
+                  </Text>
+                  {!qualifiesForFree && (
+                    <Text size="xs" c="dimmed">
+                      Add ₹{(500 - itemsPrice).toFixed(2)} more for free delivery
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
+            
+            <Divider my="sm" />
+            <Text>
                 <strong>Current Admin Status:</strong> 
                 <Badge ml={5} color={
                   selectedStatus === "Delivered" ? "green" : 
